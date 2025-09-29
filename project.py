@@ -40,7 +40,6 @@ def get_realtime_climate(district):
     coords = get_district_coords(district)
     if coords is None:
         return None
-
     lat = coords['lat']
     lon = coords['lon']
     url = f'http://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}'
@@ -58,7 +57,6 @@ def get_realtime_climate(district):
             'ALLSKY_SFC_SW_DWN': 0,  # Placeholder
             'EVPTRNS': 0  # Placeholder
         }
-        st.success(f"Fetched real-time climate data for {district}: Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm (daily)")
         return climate
     except requests.RequestException as e:
         st.warning(f"Error fetching weather data for {district}: {e}. Using historical averages.")
@@ -108,7 +106,6 @@ def get_historical_climate(district):
         st.warning(f"No data for {district}. Using global averages.")
         return df_clean[num_features[:-2]].mean().to_dict()
     historical = district_data[num_features[:-2]].mean().to_dict()
-    st.info(f"Historical climate for {district}: Temp={historical['T2M']:.1f}°C, Humidity={historical['RH2M']}%, Precip={historical['PRECTOTCORR']}mm")
     return historical
 
 # Prediction Function
@@ -123,19 +120,10 @@ def predict_suitability(district, crop, season='Kharif', year=2025, area=5000, c
     except KeyError:
         st.error(f"Invalid season '{season}'. Choose from {list(season_map.keys())}.")
         return None, None, None
-
-    # Fetch climate data
-    if climate_data is None:
-        climate = get_realtime_climate(district)
-        if climate is None:
-            climate = get_historical_climate(district)
-    else:
-        climate = climate_data
-        st.info(f"Using climate data for {district}: Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm")
-
+    # Use provided climate data
+    climate = climate_data
     climate['ALLSKY_SFC_SW_DWN'] = df_clean['ALLSKY_SFC_SW_DWN'].mean()
     climate['EVPTRNS'] = df_clean['EVPTRNS'].mean()
-
     input_df = pd.DataFrame({
         'Year': [year], 'District_Enc': [dist_enc], 'Crop_Enc': [crop_enc], 'Season': [season_num],
         'Area_Hectare': [area]
@@ -143,10 +131,8 @@ def predict_suitability(district, crop, season='Kharif', year=2025, area=5000, c
     for key in num_features[:-2]:
         input_df[key] = climate[key]
     input_df['Precip_Temp_Interact'] = input_df['PRECTOTCORR'] * input_df['T2M']
-
     input_scaled = input_df[features].copy()
     input_scaled[num_features] = scaler.transform(input_scaled[num_features])
-
     try:
         yield_pred = lgb_model.predict(input_scaled)[0]
         thresh = means.get((district, crop), np.median(df_clean['Yield (Tonne/Hectare)']))
@@ -163,22 +149,13 @@ def suggest_crops(district, season, year=2025, top_k=2, climate_data=None):
     except ValueError:
         st.error(f"No crops found for district '{district}'.")
         return []
-
     possible_crops = df_clean[df_clean['District_Enc'] == dist_enc]['Crop'].unique()
     if len(possible_crops) == 0:
         st.error(f"No crops found for district '{district}'.")
         return []
-
-    if climate_data is None:
-        climate = get_realtime_climate(district)
-        if climate is None:
-            climate = get_historical_climate(district)
-    else:
-        climate = climate_data
-
     preds = []
     for crop in possible_crops:
-        yield_p, _, _ = predict_suitability(district, crop, season, year, climate_data=climate)
+        yield_p, _, _ = predict_suitability(district, crop, season, year, climate_data=climate_data)
         if yield_p is not None:
             preds.append((crop, yield_p))
     return sorted(preds, key=lambda x: x[1], reverse=True)[:top_k]
@@ -191,7 +168,6 @@ st.write("Enter details to predict crop yield and get crop recommendations.")
 districts = list(le_district.classes_)
 crops = list(le_crop.classes_)
 seasons = list(season_map.keys())
-
 with st.form("prediction_form"):
     user_district = st.selectbox("Select District", districts, help="Choose a district (e.g., Ariyalur)")
     user_crop = st.selectbox("Select Crop", crops, help="Choose a crop (e.g., Rice)")
@@ -204,17 +180,10 @@ if submitted:
     climate = get_realtime_climate(user_district)
     if climate is None:
         climate = get_historical_climate(user_district)
-
-    # Compare API and historical data
-    historical = get_historical_climate(user_district)
-    st.subheader("API vs Historical Climate Comparison")
-    comparison_data = {
-        'Parameter': ['Temperature (°C)', 'Humidity (%)', 'Precipitation (mm)'],
-        'API': [climate.get('T2M', historical['T2M']), climate.get('RH2M', historical['RH2M']), climate.get('PRECTOTCORR', historical['PRECTOTCORR'])],
-        'Historical': [historical['T2M'], historical['RH2M'], historical['PRECTOTCORR']]
-    }
-    st.table(pd.DataFrame(comparison_data).round(2))
-
+        st.info(f"Using historical climate for {user_district}: Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm")
+    else:
+        st.success(f"Fetched real-time climate data for {user_district}: Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm (daily)")
+    
     # Predict Yield
     st.subheader(f"Prediction for {user_crop} in {user_district} ({user_season})")
     yield_p, suitable, thresh = predict_suitability(user_district, user_crop, user_season, area=user_area, climate_data=climate)
@@ -232,5 +201,3 @@ if submitted:
         st.table(suggestions_df)
     else:
         st.error("No crop suggestions available.")
-
-    

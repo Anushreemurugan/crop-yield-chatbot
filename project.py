@@ -66,17 +66,17 @@ def get_realtime_climate(district):
 
 # Load Artifacts
 try:
-    with open('lgb_model.pkl', 'rb') as f:
+    with open('project/lgb_model.pkl', 'rb') as f:
         lgb_model = pickle.load(f)
-    with open('le_district.pkl', 'rb') as f:
+    with open('project/le_district.pkl', 'rb') as f:
         le_district = pickle.load(f)
-    with open('le_crop.pkl', 'rb') as f:
+    with open('project/le_crop.pkl', 'rb') as f:
         le_crop = pickle.load(f)
-    with open('scaler.pkl', 'rb') as f:
+    with open('project/scaler.pkl', 'rb') as f:
         scaler = pickle.load(f)
-    with open('means.pkl', 'rb') as f:
+    with open('project/means.pkl', 'rb') as f:
         means = pickle.load(f)
-    with open('season_map.pkl', 'rb') as f:
+    with open('project/season_map.pkl', 'rb') as f:
         season_map = pickle.load(f)
 except FileNotFoundError as e:
     st.error(f"Error: Missing artifact file {e.filename}. Please ensure all .pkl files are in the same directory.")

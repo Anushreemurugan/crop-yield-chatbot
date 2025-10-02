@@ -217,3 +217,16 @@ if submitted:
         st.table(suggestions_df)
     else:
         st.error("No crop suggestions available.")
+# Add after imports
+st.markdown("""
+<style>
+    [data-testid="stAppViewContainer"] {
+        background-color: #f0f8f0;  /* Light green background */
+    }
+    .stApp > header { background-color: #2e7d32; }  /* Dark green header */
+    .stMarkdown { font-family: 'Arial', sans-serif; font-size: 16px; }
+</style>
+""", unsafe_allow_html=True)
+
+# Set light theme (or dark: st.set_page_config(initial_sidebar_state="collapsed", theme="dark"))
+st.set_page_config(page_title="Crop Yield Predictor", layout="wide", theme="light")

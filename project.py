@@ -125,7 +125,10 @@ def predict_suitability(district, crop, season='Kharif', year=2025, area=5000, c
     climate['ALLSKY_SFC_SW_DWN'] = df_clean['ALLSKY_SFC_SW_DWN'].mean()
     climate['EVPTRNS'] = df_clean['EVPTRNS'].mean()
     input_df = pd.DataFrame({
-        'Year': [year], 'District_Enc': [dist_enc], 'Crop_Enc': [crop_enc], 'Season': [season_num],
+        'Year': [year],
+        'District_Enc': [dist_enc],
+        'Crop_Enc': [crop_enc],
+        'Season': [season_num],
         'Area_Hectare': [area]
     })
     for key in num_features[:-2]:
@@ -143,22 +146,28 @@ def predict_suitability(district, crop, season='Kharif', year=2025, area=5000, c
         return None, None, None
 
 # Suggest Crops
-def suggest_crops(district, season, year=2025, top_k=2, climate_data=None):
+def suggest_crops(district, season, current_crop=None, year=2025, top_k=2, climate_data=None):
     try:
         dist_enc = le_district.transform([district])[0]
     except ValueError:
         st.error(f"No crops found for district '{district}'.")
         return []
-    possible_crops = df_clean[df_clean['District_Enc'] == dist_enc]['Crop'].unique()
+    possible_crops = df_clean[df_clean['District'] == district]['Crop'].unique()
     if len(possible_crops) == 0:
         st.error(f"No crops found for district '{district}'.")
         return []
+    if current_crop:
+        possible_crops = [c for c in possible_crops if c != current_crop]
     preds = []
+    global_median = np.median(df_clean['Yield (Tonne/Hectare)'])
     for crop in possible_crops:
-        yield_p, _, _ = predict_suitability(district, crop, season, year, climate_data=climate_data)
+        yield_p, _, thresh = predict_suitability(district, crop, season, year, climate_data=climate_data)
         if yield_p is not None:
-            preds.append((crop, yield_p))
-    return sorted(preds, key=lambda x: x[1], reverse=True)[:top_k]
+            hist = thresh
+            relative_score = yield_p / hist if hist > 0 else yield_p / global_median
+            preds.append((crop, yield_p, relative_score))
+    # Sort by relative_score descending
+    return sorted(preds, key=lambda x: x[2], reverse=True)[:top_k]
 
 # Streamlit App
 st.title("Crop Yield Prediction Chatbot")
@@ -168,6 +177,7 @@ st.write("Enter details to predict crop yield and get crop recommendations.")
 districts = list(le_district.classes_)
 crops = list(le_crop.classes_)
 seasons = list(season_map.keys())
+
 with st.form("prediction_form"):
     user_district = st.selectbox("Select District", districts, help="Choose a district (e.g., Ariyalur)")
     user_crop = st.selectbox("Select Crop", crops, help="Choose a crop (e.g., Rice)")
@@ -183,21 +193,27 @@ if submitted:
         st.info(f"Using historical climate for {user_district}: Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm")
     else:
         st.success(f"Fetched real-time climate data for {user_district}: Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm (daily)")
-    
+
     # Predict Yield
     st.subheader(f"Prediction for {user_crop} in {user_district} ({user_season})")
     yield_p, suitable, thresh = predict_suitability(user_district, user_crop, user_season, area=user_area, climate_data=climate)
     if yield_p is not None:
         st.write(f"**Predicted Yield**: {yield_p:.2f} T/Ha")
-        st.write(f"**Suitable**: {'Yes' if suitable else 'No'} (Mean: {thresh:.2f} T/Ha)")
+        st.write(f"**Suitable**: {'Yes' if suitable else 'No'} (Historical Mean: {thresh:.2f} T/Ha)")
     else:
         st.error("Prediction failed. Check inputs.")
 
     # Suggest Crops
-    st.subheader(f"Top Crop Suggestions for {user_district} ({user_season})")
-    suggestions = suggest_crops(user_district, user_season, year=2025, top_k=2, climate_data=climate)
+    st.subheader(f"Top Alternative Crop Suggestions for {user_district} ({user_season})")
+
+    suggestions = suggest_crops(user_district, user_season, current_crop=user_crop, year=2025, top_k=2, climate_data=climate)
     if suggestions:
-        suggestions_df = pd.DataFrame(suggestions, columns=['Crop', 'Predicted Yield (T/Ha)']).round(2)
+        data = {
+            'Crop': [s[0] for s in suggestions],
+            'Predicted Yield (T/Ha)': [round(s[1], 2) for s in suggestions],
+            'Relative Score': [f"{s[2]:.2f}" for s in suggestions]
+        }
+        suggestions_df = pd.DataFrame(data)
         st.table(suggestions_df)
     else:
         st.error("No crop suggestions available.")

@@ -253,12 +253,7 @@ with st.sidebar:
             del st.session_state[key]
         st.session_state.predicted = False  # Re-init flag
         st.rerun()
-    st.header("ℹ️ Help")
-    st.write("- Use dropdowns for accuracy.")
-    st.write("- Predictions use real-time weather.")
-    st.caption("Data from Tamil Nadu 2014-2023")
-
-# Layout with columns
+    # Layout with columns
 col1, col2 = st.columns([1, 2])
 
 with col1:

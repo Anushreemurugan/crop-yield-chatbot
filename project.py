@@ -60,14 +60,6 @@ st.markdown("""
         border-left: 5px solid #4caf50;
         margin: 1rem 0;
     }
-    /* Chat messages for theme consistency */
-    .stChatMessage {
-        background-color: #e8f5e8;
-        border-radius: 10px;
-        padding: 1rem;
-        margin: 0.5rem 0;
-        border-left: 5px solid #4caf50;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -306,192 +298,116 @@ def suggest_crops(district, season, year=2025, top_k=2, climate_data=None, exclu
 st.title("🌾 Crop Yield Prediction Chatbot")
 st.markdown("**Predict yields and get smart crop suggestions based on real-time weather.**")
 
-# Chat history
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# Initialize session state for prediction persistence
+if 'predicted' not in st.session_state:
+    st.session_state.predicted = False
+if 'yield_p' not in st.session_state:
+    st.session_state.yield_p = None
+if 'suitable' not in st.session_state:
+    st.session_state.suitable = None
+if 'thresh' not in st.session_state:
+    st.session_state.thresh = None
+if 'suggestions' not in st.session_state:
+    st.session_state.suggestions = []
+if 'climate_msg' not in st.session_state:
+    st.session_state.climate_msg = None
+if 'user_district' not in st.session_state:
+    st.session_state.user_district = None
+if 'user_crop' not in st.session_state:
+    st.session_state.user_crop = None
+if 'user_season' not in st.session_state:
+    st.session_state.user_season = None
+if 'user_area' not in st.session_state:
+    st.session_state.user_area = 5000.0
 
-# Display chat history with theme
-def display_chat_history():
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown('<div class="stChatMessage">' + message["content"] + '</div>', unsafe_allow_html=True)
-            if "suggestions" in message:
-                suggestions_df = pd.DataFrame([[crop, f"{yield_pred:.2f}"] for crop, yield_pred in message["suggestions"]], columns=['Crop', 'Predicted Yield (T/Ha)'])
-                st.table(suggestions_df.style.background_gradient(cmap='Greens'))
-            if "prediction" in message:
-                pred_data = message["prediction"]
-                st.markdown(f'<div class="metric-card"><h3>Predicted Yield</h3><p>{pred_data["yield"]:.2f} T/Ha</p></div>', unsafe_allow_html=True)
-                col_metrics1, col_metrics2 = st.columns(2)
-                with col_metrics1:
-                    st.metric("Suitability", "Yes" if pred_data['suitable'] else "No", delta=f"vs Mean {pred_data['mean']:.2f}")
-                with col_metrics2:
-                    st.metric("Historical Mean", f"{pred_data['mean']:.2f} T/Ha")
+# Districts, Crops, Seasons with icons
+districts_list = list(le_district.classes_)
+crops_list = list(le_crop.classes_)
+seasons_list = list(season_map.keys())
+district_options = [f"🏛️ {d}" for d in districts_list]
+crop_options = [f"🌾 {c}" for c in crops_list]
+season_options = ['🌾 Kharif', '❄️ Rabi', '🍂 Autumn', '☀️ Summer', '🌨️ Winter', '📅 Whole Year']
 
-display_chat_history()
-
-# Chat input
-if prompt := st.chat_input("Type your query here (e.g., 'Suggest crops for Ariyalur in Kharif' or 'Predict rice yield in Coimbatore')"):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown('<div class="stChatMessage">' + prompt + '</div>', unsafe_allow_html=True)
-
-    # Parse query (improved)
-    def parse_query(query):
-        query_lower = query.lower()
-        district = None
-        crop = None
-        season = 'Kharif'
-        if "suggest" in query_lower or "recommend" in query_lower:
-            action = "suggest"
-            words = query_lower.split()
-            for i, w in enumerate(words):
-                if w in ['for', 'in']:
-                    if i+1 < len(words):
-                        potential_district = words[i+1]
-                        if potential_district in [d.lower() for d in le_district.classes_]:
-                            district = potential_district.capitalize()
-                            break
-            for w in words:
-                if w in ['kharif', 'rabi', 'autumn', 'summer', 'winter', 'whole year']:
-                    season = w.capitalize()
-                    break
-            if not district:
-                district = "Ariyalur"
-        elif "predict" in query_lower or "yield" in query_lower:
-            action = "predict"
-            words = query_lower.split()
-            for w in words:
-                if w in [c.lower() for c in le_crop.classes_]:
-                    crop = w.capitalize()
-                    break
-            if not crop:
-                crop = "Rice"
-            for i, w in enumerate(words):
-                if w in ['in']:
-                    if i+1 < len(words):
-                        potential_district = words[i+1]
-                        if potential_district in [d.lower() for d in le_district.classes_]:
-                            district = potential_district.capitalize()
-                            break
-            for w in words:
-                if w in ['kharif', 'rabi', 'autumn', 'summer', 'winter', 'whole year']:
-                    season = w.capitalize()
-                    break
-            if not district:
-                district = "Ariyalur"
-        else:
-            action = "unknown"
-        return action, {"district": district or "Ariyalur", "crop": crop, "season": season}
-
-    action, params = parse_query(prompt)
-    district = params["district"]
-    crop = params["crop"]
-    season = params["season"]
-
-    with st.chat_message("assistant"):
-        with st.spinner("Processing..."):
-            if action == "suggest":
-                climate = get_realtime_climate(district)
-                if climate is None:
-                    climate = get_historical_climate(district, season)
-                suggestions = suggest_crops(district, season, climate_data=climate, top_k=3, exclude_crop=None, sort_by='balanced')
-                response = f"Top 3 crop suggestions for {district} in {season}:"
-                st.markdown('<div class="stChatMessage">' + response + '</div>', unsafe_allow_html=True)
-                sugg_list = [(crop_s, yield_pred) for crop_s, yield_pred, _ in suggestions]
-                suggestions_df = pd.DataFrame([[s[0], f"{s[1]:.2f}"] for s in sugg_list], columns=['Crop', 'Predicted Yield (T/Ha)'])
-                st.table(suggestions_df.style.background_gradient(cmap='Greens'))
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": response,
-                    "suggestions": sugg_list
-                })
-                st.balloons()
-            elif action == "predict":
-                area = 5000  # Default to match notebook
-                climate = get_realtime_climate(district)
-                if climate is None:
-                    climate = get_historical_climate(district, season)
-                yield_p, suitable, thresh = predict_suitability(district, crop, season, area=area, climate_data=climate)
-                if yield_p is not None:
-                    response = f"Prediction for {crop} in {district} ({season}): {yield_p:.2f} T/Ha"
-                    st.markdown('<div class="stChatMessage">' + response + '</div>', unsafe_allow_html=True)
-                    st.markdown(f'<div class="metric-card"><h3>Predicted Yield</h3><p>{yield_p:.2f} T/Ha</p></div>', unsafe_allow_html=True)
-                    col_metrics1, col_metrics2 = st.columns(2)
-                    with col_metrics1:
-                        st.metric("Suitability", "Yes" if suitable else "No", delta=f"vs Mean {thresh:.2f}")
-                    with col_metrics2:
-                        st.metric("Historical Mean", f"{thresh:.2f} T/Ha")
-                    st.session_state.messages.append({
-                        "role": "assistant",
-                        "content": response,
-                        "prediction": {"yield": yield_p, "suitable": suitable, "mean": thresh}
-                    })
-                    st.balloons()
-                else:
-                    st.error("Prediction failed. Check district/crop names (e.g., Ariyalur, Rice).")
-                    st.session_state.messages.append({"role": "assistant", "content": "Prediction failed. Please check inputs."})
-            else:
-                response = "I can help with crop suggestions or yield predictions! Try: 'Suggest crops for Ariyalur in Kharif' or 'Predict rice yield in Coimbatore'"
-                st.markdown('<div class="stChatMessage">' + response + '</div>', unsafe_allow_html=True)
-                st.session_state.messages.append({"role": "assistant", "content": response})
-
-# Sidebar from old code (adapted with icons in selectboxes, default area=5000)
+# User Inputs
 with st.sidebar:
     st.header("🛠️ Settings")
-    st.write("**App Version**: 1.3 (Fixed caching)")
-    if st.button("Reset Chat"):
-        st.session_state.messages = []
+    st.write("**App Version**: 1.3")
+    if st.button("Reset Form"):
+        for key in ['predicted', 'yield_p', 'suitable', 'thresh', 'suggestions', 'climate_msg', 'user_district', 'user_crop', 'user_season', 'user_area']:
+            if key in st.session_state:
+                del st.session_state[key]
+        st.session_state.predicted = False
         st.rerun()
-    st.header("📊 Quick Actions")
-    quick_action = st.selectbox("Choose Action", ["Predict Yield", "Suggest Crops", "View Insights"])
-    districts_list = list(le_district.classes_)
-    crops_list = list(le_crop.classes_)
-    # Add icons/emojis to options
-    district_options = [f"🏛️ {d}" for d in districts_list]
-    crop_options = [f"🌾 {c}" for c in crops_list]
-    season_options = ['🌾 Kharif', '❄️ Rabi', '🍂 Autumn', '☀️ Summer', '🌨️ Winter', '📅 Whole Year']
-    if quick_action == "Predict Yield":
-        st.markdown("### Predict Yield")
-        selected_district_display = st.selectbox("🌍 District", district_options, index=districts_list.index("Thanjavur") if "Thanjavur" in districts_list else 0)
-        district = selected_district_display.split(' ', 1)[1]
-        selected_crop_display = st.selectbox("🌾 Crop", crop_options, index=crops_list.index("Rice") if "Rice" in crops_list else 0)
-        crop = selected_crop_display.split(' ', 1)[1]
-        selected_season_display = st.selectbox("☀️ Season", season_options, index=0)
-        season = selected_season_display.split(' ', 1)[1]
-        area = st.number_input("📏 Area (Ha)", value=5000.0, min_value=1.0)  # Default 5000 to match notebook
-        if st.button("Predict", key="quick_predict"):
-            climate = get_realtime_climate(district)
-            if climate is None:
-                climate = get_historical_climate(district, season)
-            yield_p, suitable, thresh = predict_suitability(district, crop, season, area=area, climate_data=climate)
-            if yield_p is not None:
-                st.success(f"Yield: {yield_p:.2f} T/Ha | Suitable: {'Yes' if suitable else 'No'} | Mean: {thresh:.2f}")
-    elif quick_action == "Suggest Crops":
-        st.markdown("### Suggest Crops")
-        selected_district_display = st.selectbox("🌍 District", district_options, index=districts_list.index("Thanjavur") if "Thanjavur" in districts_list else 0)
-        district = selected_district_display.split(' ', 1)[1]
-        selected_season_display = st.selectbox("☀️ Season", season_options, index=0)
-        season = selected_season_display.split(' ', 1)[1]
-        exclude = st.text_input("Exclude Crop", "Rice")
-        if st.button("Suggest", key="quick_suggest"):
-            climate = get_realtime_climate(district)
-            if climate is None:
-                climate = get_historical_climate(district, season)
-            suggestions = suggest_crops(district, season, climate_data=climate, top_k=2, exclude_crop=exclude, sort_by='balanced')
-            suggestions_df = pd.DataFrame([[s[0], f"{s[1]:.2f}"] for s in suggestions], columns=['Crop', 'Predicted Yield (T/Ha)'])
-            st.table(suggestions_df.style.background_gradient(cmap='Greens'))
-    elif quick_action == "View Insights":
-        st.markdown("### Model Insights")
-        importance_df = pd.DataFrame({
-            'Feature': features,
-            'Importance': lgb_model.feature_importances_ / sum(lgb_model.feature_importances_)
-        }).sort_values('Importance', ascending=False).head(5)
-        fig, ax = plt.subplots(figsize=(8, 5))
-        sns.barplot(data=importance_df, x='Importance', y='Feature', ax=ax, palette='viridis')
-        ax.set_title('Top 5 Feature Importances')
-        st.pyplot(fig)
-        st.markdown("### Dataset Stats")
-        st.write(f"Districts: {df_clean['District'].nunique()}")
-        st.write(f"Crops: {df_clean['Crop'].nunique()}")
-        st.write(f"Seasons: {df_clean['Season'].nunique()}")
+
+# Layout with columns
+col1, col2 = st.columns([1, 2])
+with col1:
+    st.subheader("📝 Input Details")
+    with st.form("inputs_form"):
+        with st.expander("Select Parameters", expanded=True):
+            selected_district_display = st.selectbox("🌍 District", district_options, index=districts_list.index("Thanjavur") if "Thanjavur" in districts_list else 0)
+            user_district = selected_district_display.split(' ', 1)[1]
+            selected_crop_display = st.selectbox("🌾 Crop", crop_options, index=crops_list.index("Rice") if "Rice" in crops_list else 0)
+            user_crop = selected_crop_display.split(' ', 1)[1]
+            selected_season_display = st.selectbox("☀️ Season", season_options, index=0)
+            user_season = selected_season_display.split(' ', 1)[1]
+            user_area = st.number_input("📏 Area (Hectare)", min_value=1.0, value=5000.0, step=100.0)
+        # Full-width horizontal button
+        submitted = st.form_submit_button("🚀 Predict & Suggest", type="primary", use_container_width=True)
+
+with col2:
+    if st.session_state.predicted:
+        with st.spinner("Fetching weather and predicting..."):
+            # Fetch climate data once (but since persisted, show stored)
+            if st.session_state.climate_msg:
+                st.info(st.session_state.climate_msg)
+            # Predict Yield
+            st.subheader(f"Prediction for {st.session_state.user_crop} in {st.session_state.user_district} ({st.session_state.user_season})")
+            if st.session_state.yield_p is not None:
+                st.balloons()  # Confetti animation
+                st.success(f"Prediction complete! 🌟 Yield: {st.session_state.yield_p:.2f} T/Ha")
+                st.markdown(f'<div class="metric-card"><h3>Predicted Yield</h3><p>{st.session_state.yield_p:.2f} T/Ha</p></div>', unsafe_allow_html=True)
+                col_metrics1, col_metrics2 = st.columns(2)
+                with col_metrics1:
+                    st.metric("Suitability", "Yes" if st.session_state.suitable else "No", delta=f"vs Mean {st.session_state.thresh:.2f}")
+                with col_metrics2:
+                    st.metric("Area Input", f"{st.session_state.user_area} Ha")
+                # Suggest Crops
+                st.subheader(f"💡 Top Alternative Crop Suggestions (balanced for diversity) for {st.session_state.user_district} ({st.session_state.user_season})")
+                if st.session_state.suggestions:
+                    suggestions_df = pd.DataFrame([[s[0], round(s[1], 2)] for s in st.session_state.suggestions], columns=['Crop', 'Predicted Yield (T/Ha)'])
+                    st.table(suggestions_df.style.background_gradient(cmap='Greens'))
+                else:
+                    st.error("No crop suggestions available.")
+            else:
+                st.error("Prediction failed. Check inputs.")
+        # Button to hide results or new prediction
+        if st.button("New Prediction"):
+            st.session_state.predicted = False
+            st.rerun()
+
+if submitted:
+    # Update session state with current inputs
+    st.session_state.user_district = user_district
+    st.session_state.user_crop = user_crop
+    st.session_state.user_season = user_season
+    st.session_state.user_area = user_area
+    # Fetch climate data once
+    climate = get_realtime_climate(user_district)
+    if climate is None:
+        climate = get_historical_climate(user_district, user_season)
+        st.session_state.climate_msg = f"Using historical climate for {user_district}: Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm"
+    else:
+        st.session_state.climate_msg = f"Fetched real-time climate data for {user_district}: Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm (daily)"
+    # Predict Yield
+    yield_p, suitable, thresh = predict_suitability(user_district, user_crop, user_season, area=user_area, climate_data=climate)
+    st.session_state.yield_p = yield_p
+    st.session_state.suitable = suitable
+    st.session_state.thresh = thresh
+    # Suggest Crops
+    suggestions = suggest_crops(user_district, user_season, exclude_crop=user_crop, year=2025, top_k=2, climate_data=climate, sort_by='balanced')
+    st.session_state.suggestions = suggestions
+    # Set flag
+    st.session_state.predicted = True
+    st.rerun()  # Rerun to show results immediately
 

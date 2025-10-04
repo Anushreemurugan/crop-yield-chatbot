@@ -196,7 +196,11 @@ st.markdown("""
         padding: 0.5rem 1rem;
         font-weight: bold;
         white-space: nowrap;
-        min-width: 150px;  /* Ensure minimum width for button text */
+    }
+    /* Form submit button full width */
+    .stForm > .stButton > button {
+        width: 100%;
+        justify-content: center;
     }
     /* Metric cards */
     .metric-card {
@@ -266,12 +270,8 @@ with col1:
             user_season = st.selectbox("☀️ Season", seasons, index=seasons.index('Kharif'), key="season", help="Choose a season")
             user_area = st.number_input("📏 Area (Hectare)", min_value=1.0, value=5000.0, step=100.0, key="area")
 
-        # Button row aligned to the right with more space
-        btn_col1, btn_col2 = st.columns([3, 1])  # Unequal split: more space on left, button on right
-        with btn_col1:
-            st.empty()  # Empty space on left
-        with btn_col2:
-            submitted = st.form_submit_button("🚀 Predict & Suggest", type="primary")
+        # Full-width horizontal button
+        submitted = st.form_submit_button("🚀 Predict & Suggest", type="primary", use_container_width=True)
 
 with col2:
     if st.session_state.predicted:

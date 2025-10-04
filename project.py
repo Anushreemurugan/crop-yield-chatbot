@@ -279,7 +279,7 @@ with col2:
             st.subheader(f"Prediction for {st.session_state.user_crop} in {st.session_state.user_district} ({st.session_state.user_season})")
             if st.session_state.yield_p is not None:
                 st.balloons()  # Confetti animation (runs once per view)
-                st.success(f"Prediction complete! 🌟 Yield: {st.session_state.yield_p:.2f} T/Ha")
+                st.success(f"Prediction complete! } T/Ha")
                 st.markdown('<div class="metric-card"><h3>Predicted Yield</h3><p>{:.2f} T/Ha</p></div>'.format(st.session_state.yield_p), unsafe_allow_html=True)
                 col_metrics1, col_metrics2 = st.columns(2)
                 with col_metrics1:

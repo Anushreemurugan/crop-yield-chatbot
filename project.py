@@ -12,7 +12,7 @@ import json
 from datetime import datetime
 
 # OpenWeatherMap API Key (Replace with your actual API key)
-API_KEY = 'a5c4d7596f1d44f689f39ccec6f68de4'  # REPLACE WITH YOUR VALID KEY
+API_KEY = 'a5c4d7596f1d44f689f39ccec6f68de4' # REPLACE WITH YOUR VALID KEY
 
 # Function to Get District Coordinates
 def get_district_coords(district):
@@ -50,12 +50,12 @@ def get_realtime_climate(district):
         climate = {
             'T2M': data['main']['temp'] - 273.15,
             'RH2M': data['main']['humidity'],
-            'PRECTOTCORR': data.get('rain', {}).get('1h', 0) * 24,  # Convert hourly to daily
+            'PRECTOTCORR': data.get('rain', {}).get('1h', 0) * 24, # Convert hourly to daily
             'WS2M': data['wind']['speed'],
             'T2M_MAX': data['main']['temp_max'] - 273.15 if 'temp_max' in data['main'] else data['main']['temp'] - 273.15,
             'T2M_MIN': data['main']['temp_min'] - 273.15 if 'temp_min' in data['main'] else data['main']['temp'] - 273.15,
-            'ALLSKY_SFC_SW_DWN': 0,  # Placeholder
-            'EVPTRNS': 0  # Placeholder
+            'ALLSKY_SFC_SW_DWN': 0, # Placeholder
+            'EVPTRNS': 0 # Placeholder
         }
         return climate
     except requests.RequestException as e:
@@ -169,64 +169,105 @@ def suggest_crops(district, season, current_crop=None, year=2025, top_k=2, clima
     # Sort by relative_score descending
     return sorted(preds, key=lambda x: x[2], reverse=True)[:top_k]
 
-# Streamlit App
-st.title("Crop Yield Prediction Chatbot")
-st.write("Enter details to predict crop yield and get crop recommendations.")
+# Set page config
+st.set_page_config(page_title="Crop Yield Predictor", layout="wide")
+
+# Custom CSS for theme
+st.markdown("""
+<style>
+    /* Background and header */
+    .stApp {
+        background: linear-gradient(to bottom, #f0f8f0, #e8f5e8);
+    }
+    .stApp > header {
+        background-color: #2e7d32;  /* Dark green header */
+        color: white;
+    }
+    /* Fonts and spacing */
+    .stMarkdown {
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 16px;
+    }
+    /* Button styling */
+    .stButton > button {
+        background-color: #4caf50;
+        color: white;
+        border-radius: 20px;
+        padding: 0.5rem 1rem;
+        font-weight: bold;
+    }
+    /* Metric cards */
+    .metric-card {
+        background-color: white;
+        padding: 1rem;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border-left: 5px solid #4caf50;
+        margin: 1rem 0;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Title with emoji
+st.title("🌾 Crop Yield Prediction Chatbot")
+st.markdown("**Predict yields and get smart crop suggestions based on real-time weather.**")
 
 # User Inputs
 districts = list(le_district.classes_)
 crops = list(le_crop.classes_)
 seasons = list(season_map.keys())
 
-with st.form("prediction_form"):
-    user_district = st.selectbox("Select District", districts, help="Choose a district (e.g., Ariyalur)")
-    user_crop = st.selectbox("Select Crop", crops, help="Choose a crop (e.g., Rice)")
-    user_season = st.selectbox("Select Season", seasons, index=seasons.index('Kharif'), help="Choose a season")
-    user_area = st.number_input("Enter Area (Hectare)", min_value=1.0, value=5000.0, step=100.0)
-    submitted = st.form_submit_button("Predict Yield and Suggest Crops")
+with st.sidebar:
+    st.header("🛠️ Settings")
+    st.write("**App Version**: 1.2")
+    if st.button("Reset Form"):
+        for key in st.session_state.keys():
+            del st.session_state[key]
+        st.rerun()
+    # Layout with columns
+col1, col2 = st.columns([1, 2])
 
-if submitted:
-    # Fetch climate data once
-    climate = get_realtime_climate(user_district)
-    if climate is None:
-        climate = get_historical_climate(user_district)
-        st.info(f"Using historical climate for {user_district}: Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm")
-    else:
-        st.success(f"Fetched real-time climate data for {user_district}: Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm (daily)")
+with col1:
+    st.subheader("📝 Input Details")
+    with st.form("inputs_form"):
+        with st.expander("Select Parameters", expanded=True):
+            user_district = st.selectbox("🌍 District", districts, key="district", help="Choose a district (e.g., Ariyalur)")
+            user_crop = st.selectbox("🌾 Crop", crops, key="crop", help="Choose a crop (e.g., Rice)")
+            user_season = st.selectbox("☀️ Season", seasons, index=seasons.index('Kharif'), key="season", help="Choose a season")
+            user_area = st.number_input("📏 Area (Hectare)", min_value=1.0, value=5000.0, step=100.0, key="area")
+        submitted = st.form_submit_button("🚀 Predict & Suggest", type="primary")
 
-    # Predict Yield
-    st.subheader(f"Prediction for {user_crop} in {user_district} ({user_season})")
-    yield_p, suitable, thresh = predict_suitability(user_district, user_crop, user_season, area=user_area, climate_data=climate)
-    if yield_p is not None:
-        st.write(f"**Predicted Yield**: {yield_p:.2f} T/Ha")
-        st.write(f"**Suitable**: {'Yes' if suitable else 'No'} (Historical Mean: {thresh:.2f} T/Ha)")
-    else:
-        st.error("Prediction failed. Check inputs.")
+with col2:
+    if submitted:
+        with st.spinner("Fetching weather and predicting..."):
+            # Fetch climate data once
+            climate = get_realtime_climate(user_district)
+            if climate is None:
+                climate = get_historical_climate(user_district)
+                st.info(f"Using historical climate for {user_district}: Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm")
+            else:
+                st.success(f"Fetched real-time climate data for {user_district}: Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm (daily)")
 
-    # Suggest Crops
-    st.subheader(f"Top Alternative Crop Suggestions for {user_district} ({user_season})")
+            # Predict Yield
+            st.subheader(f"Prediction for {user_crop} in {user_district} ({user_season})")
+            yield_p, suitable, thresh = predict_suitability(user_district, user_crop, user_season, area=user_area, climate_data=climate)
+            if yield_p is not None:
+                st.balloons()  # Confetti animation
+                st.success(f"Prediction complete! 🌟 Yield: {yield_p:.2f} T/Ha")
+                st.markdown('<div class="metric-card"><h3>Predicted Yield</h3><p>{:.2f} T/Ha</p></div>'.format(yield_p), unsafe_allow_html=True)
+                col_metrics1, col_metrics2 = st.columns(2)
+                with col_metrics1:
+                    st.metric("Suitability", "Yes" if suitable else "No", delta=f"vs Mean {thresh:.2f}")
+                with col_metrics2:
+                    st.metric("Area Input", f"{user_area} Ha")
 
-    suggestions = suggest_crops(user_district, user_season, current_crop=user_crop, year=2025, top_k=2, climate_data=climate)
-    if suggestions:
-        data = {
-            'Crop': [s[0] for s in suggestions],
-            'Predicted Yield (T/Ha)': [round(s[1], 2) for s in suggestions],
-            'Relative Score': [f"{s[2]:.2f}" for s in suggestions]
-        }
-        suggestions_df = pd.DataFrame(data)
-        st.table(suggestions_df)
-    else:
-        st.error("No crop suggestions available.")
-# Add after imports
-st.markdown("""
-<style>
-    [data-testid="stAppViewContainer"] {
-        background-color: #f0f8f0;  /* Light green background */
-    }
-    .stApp > header { background-color: #2e7d32; }  /* Dark green header */
-    .stMarkdown { font-family: 'Arial', sans-serif; font-size: 16px; }
-</style>
-""", unsafe_allow_html=True)
-
-# Set light theme (or dark: st.set_page_config(initial_sidebar_state="collapsed", theme="dark"))
-st.set_page_config(page_title="Crop Yield Predictor", layout="wide", theme="light")
+                # Suggest Crops
+                st.subheader(f"💡 Top Alternative Crop Suggestions for {user_district} ({user_season})")
+                suggestions = suggest_crops(user_district, user_season, current_crop=user_crop, year=2025, top_k=2, climate_data=climate)
+                if suggestions:
+                    suggestions_df = pd.DataFrame([[s[0], round(s[1], 2)] for s in suggestions], columns=['Crop', 'Predicted Yield (T/Ha)'])
+                    st.table(suggestions_df.style.background_gradient(cmap='Greens'))
+                else:
+                    st.error("No crop suggestions available.")
+            else:
+                st.error("Prediction failed. Check inputs.")

@@ -173,9 +173,19 @@ def load_and_train_model(_api_key):
     X_scaled[num_features] = scaler.fit_transform(X_scaled[num_features])
     # Split
     X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
-    # Train LightGBM
-    lgb_model = lgb.LGBMRegressor(n_estimators=200, learning_rate=0.05, max_depth=8, random_state=42,
-                                  num_leaves=50, min_child_samples=100, feature_fraction=0.8, verbose=-1)
+    # Train LightGBM with optimized parameters
+    lgb_model = lgb.LGBMRegressor(
+        n_estimators=500,
+        learning_rate=0.1,
+        max_depth=7,
+        num_leaves=31,
+        min_child_samples=20,
+        feature_fraction=0.8,
+        lambda_l1=0.1,
+        lambda_l2=0.1,
+        random_state=42,
+        verbose=-1
+    )
     lgb_model.fit(X_train, y_train, categorical_feature=['District_Enc', 'Crop_Enc', 'Season'])
     # Compute Mean for Suitability Threshold (before outlier removal)
     means = df_clean.groupby(['District', 'Crop'])['Yield (Tonne/Hectare)'].mean().to_dict()
@@ -343,7 +353,11 @@ with col1:
         submitted = st.form_submit_button("🚀 Predict & Suggest", type="primary", use_container_width=True)
 with col2:
     if st.session_state.predicted:
-                    # Predict Yield
+        with st.spinner("Fetching weather and predicting..."):
+            # Fetch climate data once (but since persisted, show stored)
+            if st.session_state.climate_msg:
+                st.info(st.session_state.climate_msg)
+            # Predict Yield
             st.subheader(f"Prediction for {st.session_state.user_crop} in {st.session_state.user_district} ({st.session_state.user_season})")
             if st.session_state.yield_p is not None:
                 st.balloons() # Confetti animation

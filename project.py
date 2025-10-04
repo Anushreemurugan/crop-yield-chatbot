@@ -212,6 +212,28 @@ st.markdown("""
 st.title("🌾 Crop Yield Prediction Chatbot")
 st.markdown("**Predict yields and get smart crop suggestions based on real-time weather.**")
 
+# Initialize session state for prediction persistence
+if 'predicted' not in st.session_state:
+    st.session_state.predicted = False
+if 'yield_p' not in st.session_state:
+    st.session_state.yield_p = None
+if 'suitable' not in st.session_state:
+    st.session_state.suitable = None
+if 'thresh' not in st.session_state:
+    st.session_state.thresh = None
+if 'suggestions' not in st.session_state:
+    st.session_state.suggestions = []
+if 'climate_msg' not in st.session_state:
+    st.session_state.climate_msg = None
+if 'user_district' not in st.session_state:
+    st.session_state.user_district = None
+if 'user_crop' not in st.session_state:
+    st.session_state.user_crop = None
+if 'user_season' not in st.session_state:
+    st.session_state.user_season = None
+if 'user_area' not in st.session_state:
+    st.session_state.user_area = 5000.0
+
 # User Inputs
 districts = list(le_district.classes_)
 crops = list(le_crop.classes_)
@@ -221,10 +243,16 @@ with st.sidebar:
     st.header("🛠️ Settings")
     st.write("**App Version**: 1.2")
     if st.button("Reset Form"):
-        for key in st.session_state.keys():
+        for key in list(st.session_state.keys()):
             del st.session_state[key]
+        st.session_state.predicted = False  # Re-init flag
         st.rerun()
-    # Layout with columns
+    st.header("ℹ️ Help")
+    st.write("- Use dropdowns for accuracy.")
+    st.write("- Predictions use real-time weather.")
+    st.caption("Data from Tamil Nadu 2014-2023")
+
+# Layout with columns
 col1, col2 = st.columns([1, 2])
 
 with col1:
@@ -235,39 +263,73 @@ with col1:
             user_crop = st.selectbox("🌾 Crop", crops, key="crop", help="Choose a crop (e.g., Rice)")
             user_season = st.selectbox("☀️ Season", seasons, index=seasons.index('Kharif'), key="season", help="Choose a season")
             user_area = st.number_input("📏 Area (Hectare)", min_value=1.0, value=5000.0, step=100.0, key="area")
-        submitted = st.form_submit_button("🚀 Predict & Suggest", type="primary")
+
+        # Button row aligned to the right
+        btn_col1, btn_col2 = st.columns([1, 1])  # Equal split to push button right
+        with btn_col1:
+            st.empty()  # Empty space on left
+        with btn_col2:
+            submitted = st.form_submit_button("🚀 Predict & Suggest", type="primary")
 
 with col2:
-    if submitted:
+    if st.session_state.predicted:
         with st.spinner("Fetching weather and predicting..."):
-            # Fetch climate data once
-            climate = get_realtime_climate(user_district)
-            if climate is None:
-                climate = get_historical_climate(user_district)
-                st.info(f"Using historical climate for {user_district}: Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm")
-            else:
-                st.success(f"Fetched real-time climate data for {user_district}: Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm (daily)")
+            # Fetch climate data once (but since persisted, show stored)
+            if st.session_state.climate_msg:
+                st.info(st.session_state.climate_msg)
 
-            # Predict Yield
-            st.subheader(f"Prediction for {user_crop} in {user_district} ({user_season})")
-            yield_p, suitable, thresh = predict_suitability(user_district, user_crop, user_season, area=user_area, climate_data=climate)
-            if yield_p is not None:
-                st.balloons()  # Confetti animation
-                st.success(f"Prediction complete! 🌟 Yield: {yield_p:.2f} T/Ha")
-                st.markdown('<div class="metric-card"><h3>Predicted Yield</h3><p>{:.2f} T/Ha</p></div>'.format(yield_p), unsafe_allow_html=True)
+            # Predict Yield (use stored, but recompute if needed; here display stored)
+            st.subheader(f"Prediction for {st.session_state.user_crop} in {st.session_state.user_district} ({st.session_state.user_season})")
+            if st.session_state.yield_p is not None:
+                st.balloons()  # Confetti animation (runs once per view)
+                st.success(f"Prediction complete! 🌟 Yield: {st.session_state.yield_p:.2f} T/Ha")
+                st.markdown('<div class="metric-card"><h3>Predicted Yield</h3><p>{:.2f} T/Ha</p></div>'.format(st.session_state.yield_p), unsafe_allow_html=True)
                 col_metrics1, col_metrics2 = st.columns(2)
                 with col_metrics1:
-                    st.metric("Suitability", "Yes" if suitable else "No", delta=f"vs Mean {thresh:.2f}")
+                    st.metric("Suitability", "Yes" if st.session_state.suitable else "No", delta=f"vs Mean {st.session_state.thresh:.2f}")
                 with col_metrics2:
-                    st.metric("Area Input", f"{user_area} Ha")
+                    st.metric("Area Input", f"{st.session_state.user_area} Ha")
 
                 # Suggest Crops
-                st.subheader(f"💡 Top Alternative Crop Suggestions for {user_district} ({user_season})")
-                suggestions = suggest_crops(user_district, user_season, current_crop=user_crop, year=2025, top_k=2, climate_data=climate)
-                if suggestions:
-                    suggestions_df = pd.DataFrame([[s[0], round(s[1], 2)] for s in suggestions], columns=['Crop', 'Predicted Yield (T/Ha)'])
+                st.subheader(f"💡 Top Alternative Crop Suggestions for {st.session_state.user_district} ({st.session_state.user_season})")
+                if st.session_state.suggestions:
+                    suggestions_df = pd.DataFrame([[s[0], round(s[1], 2)] for s in st.session_state.suggestions], columns=['Crop', 'Predicted Yield (T/Ha)'])
                     st.table(suggestions_df.style.background_gradient(cmap='Greens'))
                 else:
                     st.error("No crop suggestions available.")
             else:
                 st.error("Prediction failed. Check inputs.")
+
+        # Button to hide results or new prediction
+        if st.button("New Prediction"):
+            st.session_state.predicted = False
+            st.rerun()
+
+if submitted:
+    # Update session state with current inputs
+    st.session_state.user_district = user_district
+    st.session_state.user_crop = user_crop
+    st.session_state.user_season = user_season
+    st.session_state.user_area = user_area
+
+    # Fetch climate data once
+    climate = get_realtime_climate(user_district)
+    if climate is None:
+        climate = get_historical_climate(user_district)
+        st.session_state.climate_msg = f"Using historical climate for {user_district}: Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm"
+    else:
+        st.session_state.climate_msg = f"Fetched real-time climate data for {user_district}: Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm (daily)"
+
+    # Predict Yield
+    yield_p, suitable, thresh = predict_suitability(user_district, user_crop, user_season, area=user_area, climate_data=climate)
+    st.session_state.yield_p = yield_p
+    st.session_state.suitable = suitable
+    st.session_state.thresh = thresh
+
+    # Suggest Crops
+    suggestions = suggest_crops(user_district, user_season, current_crop=user_crop, year=2025, top_k=2, climate_data=climate)
+    st.session_state.suggestions = suggestions
+
+    # Set flag
+    st.session_state.predicted = True
+    st.rerun()  # Rerun to show results immediately

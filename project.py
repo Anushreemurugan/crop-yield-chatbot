@@ -177,11 +177,7 @@ def load_and_train_model(_api_key):
     lgb_model = lgb.LGBMRegressor(n_estimators=200, learning_rate=0.05, max_depth=8, random_state=42,
                                   num_leaves=50, min_child_samples=100, feature_fraction=0.8, verbose=-1)
     lgb_model.fit(X_train, y_train, categorical_feature=['District_Enc', 'Crop_Enc', 'Season'])
-    # Evaluate
-    y_pred_test = lgb_model.predict(X_test)
-    rmse_test = np.sqrt(mean_squared_error(y_test, y_pred_test))
-    r2_test = r2_score(y_test, y_pred_test)
-        # Compute Mean for Suitability Threshold (before outlier removal)
+    # Compute Mean for Suitability Threshold (before outlier removal)
     means = df_clean.groupby(['District', 'Crop'])['Yield (Tonne/Hectare)'].mean().to_dict()
     # Compute crop diversity factor (before outlier removal)
     crop_freq = df_clean['Crop'].value_counts()

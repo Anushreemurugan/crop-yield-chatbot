@@ -187,8 +187,7 @@ def load_and_train_model(_api_key):
     y_pred_test = lgb_model.predict(X_test)
     rmse_test = np.sqrt(mean_squared_error(y_test, y_pred_test))
     r2_test = r2_score(y_test, y_pred_test)
-    st.info(f"Model loaded: Test RMSE: {rmse_test:.3f} T/Ha, R²: {r2_test:.3f}")
-    # Compute Mean for Suitability Threshold (before outlier removal)
+        # Compute Mean for Suitability Threshold (before outlier removal)
     means = df_clean.groupby(['District', 'Crop'])['Yield (Tonne/Hectare)'].mean().to_dict()
     # Compute crop diversity factor (before outlier removal)
     crop_freq = df_clean['Crop'].value_counts()
@@ -304,7 +303,6 @@ def suggest_crops(district, season, year=2025, top_k=2, climate_data=None, exclu
 
 # Title from old code
 st.title("🌾 Crop Yield Prediction Chatbot")
-st.markdown("**Predict yields and get smart crop suggestions based on real-time weather.**")
 
 # Tabs for Form and Chat
 tab1, tab2 = st.tabs(["📝 Direct Input", "💬 Chat Query"])

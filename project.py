@@ -2,252 +2,26 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
 import lightgbm as lgb
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pickle
 import requests
-import json
 from datetime import datetime
-# OpenWeatherMap API Key (Replace with your actual API key)
-API_KEY = 'a5c4d7596f1d44f689f39ccec6f68de4' # REPLACE WITH YOUR VALID KEY
-# Function to Get District Coordinates Dynamically
-def get_district_coords(district):
-    """Fetch latitude and longitude using OpenWeatherMap Geocoding API"""
-    if API_KEY == 'YOUR_OPENWEATHERMAP_API_KEY':
-        st.error("Invalid API key. Please replace 'YOUR_OPENWEATHERMAP_API_KEY' with a valid key.")
-        return None
-    url = f'http://api.openweathermap.org/geo/1.0/direct?q={district},India&limit=1&appid={API_KEY}'
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        data = response.json()
-        if data:
-            return {'lat': data[0]['lat'], 'lon': data[0]['lon']}
-        else:
-            st.warning(f"No coordinates found for district '{district}'. Using historical averages.")
-            return None
-    except requests.RequestException as e:
-        st.warning(f"Error fetching coordinates for {district}: {e}. Using historical averages.")
-        return None
-# Function to Fetch Real-Time Climate Data
-def get_realtime_climate(district):
-    """Fetch current weather data using coordinates from Geocoding API"""
-    coords = get_district_coords(district)
-    if coords is None:
-        return None
-    lat = coords['lat']
-    lon = coords['lon']
-    url = f'http://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}'
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        data = response.json()
-        climate = {
-            'T2M': data['main']['temp'] - 273.15,
-            'RH2M': data['main']['humidity'],
-            'PRECTOTCORR': data.get('rain', {}).get('1h', 0) * 24, # Convert hourly to daily
-            'WS2M': data['wind']['speed'],
-            'T2M_MAX': data['main']['temp_max'] - 273.15 if 'temp_max' in data['main'] else data['main']['temp'] - 273.15,
-            'T2M_MIN': data['main']['temp_min'] - 273.15 if 'temp_min' in data['main'] else data['main']['temp'] - 273.15,
-            'ALLSKY_SFC_SW_DWN': 0, # Placeholder
-            'EVPTRNS': 0 # Placeholder
-        }
-        return climate
-    except requests.RequestException as e:
-        st.warning(f"Error fetching weather data for {district}: {e}. Using historical averages.")
-        return None
-# Load Artifacts
-try:
-    with open('lgb_model.pkl', 'rb') as f:
-        lgb_model = pickle.load(f)
-    with open('le_district.pkl', 'rb') as f:
-        le_district = pickle.load(f)
-    with open('le_crop.pkl', 'rb') as f:
-        le_crop = pickle.load(f)
-    with open('scaler.pkl', 'rb') as f:
-        scaler = pickle.load(f)
-    with open('means.pkl', 'rb') as f:
-        means = pickle.load(f)
-    with open('season_map.pkl', 'rb') as f:
-        season_map = pickle.load(f)
-except FileNotFoundError as e:
-    st.error(f"Error: Missing artifact file {e.filename}. Please ensure all .pkl files are in the same directory.")
-    st.stop()
-# Load and Preprocess Data (Full pipeline from notebook)
-try:
-    df = pd.read_excel('merged_monthly_dataset.xlsx')
-    print(f"Original shape: {df.shape}")
-    # Fix: Extract the starting year from "2013-2014" format
-    df['Year'] = df['Year'].astype(str).str.split('-').str[0].astype(int)
-    # Aggregate monthly data to seasonal level (key fix: average weather per season)
-    weather_cols = ['ALLSKY_SFC_SW_DWN', 'EVPTRNS', 'PRECTOTCORR', 'RH2M', 'T2M', 'T2M_MAX', 'T2M_MIN', 'WS2M']
-    df_agg = df.groupby(['District', 'Year', 'Crop', 'Season', 'Month']).agg({
-        'Area (Hectare)': 'first', # Constant per group
-        'Production (Tonnes)': 'first',
-        'Yield (Tonne/Hectare)': 'first',
-        **{col: 'mean' for col in weather_cols} # Average weather
-    }).reset_index()
-    # Optional: Filter to season-specific months for more accurate averaging (adjust ranges as needed)
-    season_months = {
-        'Kharif': [6, 7, 8, 9],
-        'Rabi': [10, 11, 12, 1, 2, 3],
-        'Autumn': [9, 10],
-        'Summer': [4, 5],
-        'Winter': [12, 1, 2],
-        'Whole Year': list(range(1, 13))
-    }
-    def filter_season_months(group):
-        season = group.name[3] # Season from group key
-        months = season_months.get(season, list(range(1, 13)))
-        return group[group['Month'].isin(months)]
-    df_filtered = df_agg.groupby(['District', 'Year', 'Crop', 'Season']).apply(filter_season_months).reset_index(drop=True)
-    # Final aggregation after filtering
-    df_clean = df_filtered.groupby(['District', 'Year', 'Crop', 'Season']).agg({
-        'Area (Hectare)': 'first',
-        'Yield (Tonne/Hectare)': 'first',
-        **{col: 'mean' for col in weather_cols}
-    }).reset_index()
-    print(f"Aggregated clean shape: {df_clean.shape}")
-    # Clean further (drop if no yield)
-    df_clean = df_clean[df_clean['Crop'].notna() & (df_clean['Area (Hectare)'] > 0) & (df_clean['Yield (Tonne/Hectare)'] > 0)].copy()
-    # Feature Engineering
-    df_clean['Precip_Temp_Interact'] = df_clean['PRECTOTCORR'] * df_clean['T2M']
-    df_clean['Season'] = df_clean['Season'].map(season_map).fillna(0)
-    # Encode categorical features (transform using loaded encoders)
-    df_clean['District_Enc'] = le_district.transform(df_clean['District'])
-    df_clean['Crop_Enc'] = le_crop.transform(df_clean['Crop'])
-    # Rename
-    df_clean = df_clean.rename(columns={'Area (Hectare)': 'Area_Hectare'})
-    # Compute crop diversity factor (inverse frequency to penalize over-represented crops like Maize/Onion)
-    crop_freq = df_clean['Crop'].value_counts()
-    diversity_factor = 1 / crop_freq
-    # Outlier Detection (IQR method) - apply after aggregation (but after computing diversity/means as in notebook)
-    def remove_outliers(df, columns):
-        df_out = df.copy()
-        initial_shape = df.shape[0]
-        for col in columns:
-            Q1 = df_out[col].quantile(0.25)
-            Q3 = df_out[col].quantile(0.75)
-            IQR = Q3 - Q1
-            lower_bound = Q1 - 1.5 * IQR
-            upper_bound = Q3 + 1.5 * IQR
-            df_out = df_out[(df_out[col] >= lower_bound) & (df_out[col] <= upper_bound)]
-            print(f"Removed outliers in {col}: {initial_shape - df_out.shape[0]} rows")
-            initial_shape = df_out.shape[0]
-        return df_out
-    outlier_columns = ['Yield (Tonne/Hectare)', 'ALLSKY_SFC_SW_DWN', 'EVPTRNS', 'PRECTOTCORR',
-                       'RH2M', 'T2M', 'T2M_MAX', 'T2M_MIN', 'WS2M']
-    df_clean = remove_outliers(df_clean, outlier_columns)
-    print(f"Shape after outlier removal: {df_clean.shape}")
-except FileNotFoundError:
-    st.error("Error: 'merged_monthly_dataset.xlsx' not found. Please ensure the dataset is in the same directory.")
-    st.stop()
-# Features and Target
-features = ['Year', 'District_Enc', 'Crop_Enc', 'Season', 'ALLSKY_SFC_SW_DWN', 'EVPTRNS', 'PRECTOTCORR',
-            'RH2M', 'T2M', 'T2M_MAX', 'T2M_MIN', 'WS2M', 'Precip_Temp_Interact', 'Area_Hectare']
-num_features = ['ALLSKY_SFC_SW_DWN', 'EVPTRNS', 'PRECTOTCORR', 'RH2M', 'T2M', 'T2M_MAX', 'T2M_MIN', 'WS2M',
-                'Precip_Temp_Interact', 'Area_Hectare']
-# Get Historical Climate (Fallback) - now season-specific average
-def get_historical_climate(district, season):
-    district_data = df_clean[df_clean['District'] == district]
-    if district_data.empty:
-        st.warning(f"No data for {district}. Using global averages.")
-        return df_clean[num_features[:-2]].mean().to_dict()
-    season_num = season_map.get(season, 0)
-    season_data = district_data[district_data['Season'] == season_num]
-    if season_data.empty:
-        season_data = district_data # Fallback to all seasons
-    historical = season_data[num_features[:-2]].mean().to_dict()
-    return historical
-# Prediction and Suitability Function (Reverted: Use mean threshold for balanced suitability)
-def predict_suitability(district, crop, season='Kharif', year=2025, area=5000, climate_data=None):
-    try:
-        dist_enc = le_district.transform([district])[0]
-        crop_enc = le_crop.transform([crop])[0]
-        season_num = season_map[season]
-    except ValueError:
-        st.error(f"Invalid district '{district}' or crop '{crop}'. Use exact spelling (e.g., Ariyalur, Rice).")
-        return None, None, None
-    except KeyError:
-        st.error(f"Invalid season '{season}'. Choose from {list(season_map.keys())}.")
-        return None, None, None
-    # Use provided climate data or fetch real-time
-    if climate_data is None:
-        climate = get_realtime_climate(district)
-        if climate is None:
-            climate = get_historical_climate(district, season)
-    else:
-        climate = climate_data
-    # Set unavailable features to historical means
-    climate['ALLSKY_SFC_SW_DWN'] = df_clean['ALLSKY_SFC_SW_DWN'].mean()
-    climate['EVPTRNS'] = df_clean['EVPTRNS'].mean()
-    input_df = pd.DataFrame({
-        'Year': [year], 'District_Enc': [dist_enc], 'Crop_Enc': [crop_enc], 'Season': [season_num],
-        'Area_Hectare': [area]
-    })
-    for key in num_features[:-2]:
-        input_df[key] = climate[key]
-    input_df['Precip_Temp_Interact'] = input_df['PRECTOTCORR'] * input_df['T2M']
-    input_scaled = input_df[features].copy()
-    input_scaled[num_features] = scaler.transform(input_scaled[num_features])
-    try:
-        yield_pred = lgb_model.predict(input_scaled)[0]
-        # Reverted: Use mean threshold for balanced suitability (fallback to global median)
-        thresh = means.get((district, crop), np.median(df_clean['Yield (Tonne/Hectare)']))
-        suitable = yield_pred > thresh
-        return yield_pred, suitable, thresh
-    except ValueError:
-        st.error(f"Error during prediction for district '{district}' or crop '{crop}'.")
-        return None, None, None
-# Suggest Top-2 Crops (Updated: Add diversity factor to balance high-yield dominants like Maize/Onion)
-def suggest_crops(district, season, year=2025, top_k=2, climate_data=None, exclude_crop=None, sort_by='balanced'):
-    """
-    Suggest top crops for a district/season.
-  
-    Args:
-        ... (existing args)
-        sort_by: 'absolute' (raw yield), 'relative' (normalized), or 'balanced' (default: yield * diversity_factor).
-    """
-    try:
-        dist_enc = le_district.transform([district])[0]
-    except ValueError:
-        st.error(f"No crops found for district '{district}'.")
-        return []
-    possible_crops = df_clean[df_clean['District'] == district]['Crop'].unique()
-    if len(possible_crops) == 0:
-        st.error(f"No crops found for district '{district}'.")
-        return []
-    # Fetch climate data once if not provided
-    if climate_data is None:
-        climate = get_realtime_climate(district)
-        if climate is None:
-            climate = get_historical_climate(district, season)
-    else:
-        climate = climate_data
-    preds = []
-    for crop in possible_crops:
-        if exclude_crop and crop == exclude_crop:
-            continue
-        yield_p, _, thresh = predict_suitability(district, crop, season, year, climate_data=climate)
-        if yield_p is not None:
-            if sort_by == 'relative':
-                normalized_yield = yield_p / (thresh if thresh > 0 else 1)
-                sort_key = normalized_yield
-            elif sort_by == 'balanced':
-                # New: Balance high-yield dominants by multiplying by inverse frequency
-                div_factor = diversity_factor.get(crop, 1.0)
-                sort_key = yield_p * div_factor
-            else: # 'absolute'
-                sort_key = yield_p
-            preds.append((crop, yield_p, sort_key))
-  
-    # Sort by the chosen key
-    return sorted(preds, key=lambda x: x[2], reverse=True)[:top_k]
-# Set page config
-st.set_page_config(page_title="Crop Yield Predictor", layout="wide")
-# Custom CSS for theme
+import io
+import base64
+
+# Page config matching old code
+st.set_page_config(
+    page_title="Crop Yield Predictor",
+    page_icon="🌾",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS from old code
 st.markdown("""
 <style>
     /* Background and header */
@@ -286,109 +60,444 @@ st.markdown("""
         border-left: 5px solid #4caf50;
         margin: 1rem 0;
     }
+    /* Chat messages for theme consistency */
+    .stChatMessage {
+        background-color: #e8f5e8;
+        border-radius: 10px;
+        padding: 1rem;
+        margin: 0.5rem 0;
+        border-left: 5px solid #4caf50;
+    }
 </style>
 """, unsafe_allow_html=True)
-# Title with emoji
+
+# Global variables
+API_KEY = 'a5c4d7596f1d44f689f39ccec6f68de4'  # Default, will be updated from sidebar
+
+def get_district_coords(district):
+    """Fetch latitude and longitude using OpenWeatherMap Geocoding API"""
+    if API_KEY == 'YOUR_OPENWEATHERMAP_API_KEY':
+        st.warning("Error: Invalid API key. Please replace with a valid key.")
+        return None
+    url = f'http://api.openweathermap.org/geo/1.0/direct?q={district},India&limit=1&appid={API_KEY}'
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        if data:
+            return {'lat': data[0]['lat'], 'lon': data[0]['lon']}
+        else:
+            st.warning(f"No coordinates found for district '{district}'. Using historical averages.")
+            return None
+    except requests.RequestException as e:
+        st.error(f"Error fetching coordinates for {district}: {e}. Using historical averages.")
+        return None
+
+def get_realtime_climate(district):
+    """Fetch current weather data using coordinates from Geocoding API"""
+    coords = get_district_coords(district)
+    if coords is None:
+        return None
+    lat = coords['lat']
+    lon = coords['lon']
+    url = f'http://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}'
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        climate = {
+            'T2M': data['main']['temp'] - 273.15,
+            'RH2M': data['main']['humidity'],
+            'PRECTOTCORR': data.get('rain', {}).get('1h', 0) * 24,  # Convert hourly to daily
+            'WS2M': data['wind']['speed'],
+            'T2M_MAX': data['main']['temp_max'] - 273.15 if 'temp_max' in data['main'] else data['main']['temp'] - 273.15,
+            'T2M_MIN': data['main']['temp_min'] - 273.15 if 'temp_min' in data['main'] else data['main']['temp'] - 273.15,
+            'ALLSKY_SFC_SW_DWN': 0,  # Placeholder
+            'EVPTRNS': 0  # Placeholder
+        }
+        return climate
+    except requests.RequestException as e:
+        st.error(f"Error fetching weather data for {district}: {e}. Using historical averages.")
+        return None
+
+@st.cache_data
+def load_and_train_model(_api_key):
+    global API_KEY
+    API_KEY = _api_key
+    # Load and Preprocess Data (from notebook)
+    df = pd.read_excel('merged_monthly_dataset.xlsx')
+    # Fix: Extract the starting year from "2013-2014" format
+    df['Year'] = df['Year'].astype(str).str.split('-').str[0].astype(int)
+    # Aggregate monthly data to seasonal level
+    weather_cols = ['ALLSKY_SFC_SW_DWN', 'EVPTRNS', 'PRECTOTCORR', 'RH2M', 'T2M', 'T2M_MAX', 'T2M_MIN', 'WS2M']
+    df_agg = df.groupby(['District', 'Year', 'Crop', 'Season', 'Month']).agg({
+        'Area (Hectare)': 'first',
+        'Production (Tonnes)': 'first',
+        'Yield (Tonne/Hectare)': 'first',
+        **{col: 'mean' for col in weather_cols}
+    }).reset_index()
+    season_months = {
+        'Kharif': [6, 7, 8, 9],
+        'Rabi': [10, 11, 12, 1, 2, 3],
+        'Autumn': [9, 10],
+        'Summer': [4, 5],
+        'Winter': [12, 1, 2],
+        'Whole Year': list(range(1, 13))
+    }
+    def filter_season_months(group):
+        season = group.name[3]
+        months = season_months.get(season, list(range(1, 13)))
+        return group[group['Month'].isin(months)]
+    df_filtered = df_agg.groupby(['District', 'Year', 'Crop', 'Season']).apply(filter_season_months).reset_index(drop=True)
+    df_clean = df_filtered.groupby(['District', 'Year', 'Crop', 'Season']).agg({
+        'Area (Hectare)': 'first',
+        'Yield (Tonne/Hectare)': 'first',
+        **{col: 'mean' for col in weather_cols}
+    }).reset_index()
+    df_clean = df_clean[df_clean['Crop'].notna() & (df_clean['Area (Hectare)'] > 0) & (df_clean['Yield (Tonne/Hectare)'] > 0)].copy()
+    # Feature Engineering
+    df_clean['Precip_Temp_Interact'] = df_clean['PRECTOTCORR'] * df_clean['T2M']
+    season_map = {'Kharif': 1, 'Rabi': 2, 'Autumn': 3, 'Summer': 4, 'Winter': 5, 'Whole Year': 6}
+    df_clean['Season'] = df_clean['Season'].map(season_map).fillna(0)
+    # Encode
+    le_district = LabelEncoder()
+    le_crop = LabelEncoder()
+    df_clean['District_Enc'] = le_district.fit_transform(df_clean['District'])
+    df_clean['Crop_Enc'] = le_crop.fit_transform(df_clean['Crop'])
+    # Features
+    features = ['Year', 'District_Enc', 'Crop_Enc', 'Season', 'ALLSKY_SFC_SW_DWN', 'EVPTRNS', 'PRECTOTCORR',
+                'RH2M', 'T2M', 'T2M_MAX', 'T2M_MIN', 'WS2M', 'Precip_Temp_Interact', 'Area_Hectare']
+    df_clean = df_clean.rename(columns={'Area (Hectare)': 'Area_Hectare'})
+    X = df_clean[features]
+    y = df_clean['Yield (Tonne/Hectare)']
+    # Scale
+    num_features = ['ALLSKY_SFC_SW_DWN', 'EVPTRNS', 'PRECTOTCORR', 'RH2M', 'T2M', 'T2M_MAX', 'T2M_MIN', 'WS2M',
+                    'Precip_Temp_Interact', 'Area_Hectare']
+    scaler = StandardScaler()
+    X_scaled = X.copy()
+    X_scaled[num_features] = scaler.fit_transform(X_scaled[num_features])
+    # Split and Train
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+    lgb_model = lgb.LGBMRegressor(n_estimators=200, learning_rate=0.05, max_depth=8, random_state=42,
+                                  num_leaves=50, min_child_samples=100, feature_fraction=0.8, verbose=-1)
+    lgb_model.fit(X_train, y_train, categorical_feature=['District_Enc', 'Crop_Enc', 'Season'])
+    # Evaluate
+    y_pred_test = lgb_model.predict(X_test)
+    rmse_test = np.sqrt(mean_squared_error(y_test, y_pred_test))
+    r2_test = r2_score(y_test, y_pred_test)
+    st.info(f"Model loaded: Test RMSE: {rmse_test:.3f} T/Ha, R²: {r2_test:.3f}")
+    # Means
+    means = df_clean.groupby(['District', 'Crop'])['Yield (Tonne/Hectare)'].mean().to_dict()
+    # Diversity
+    crop_freq = df_clean['Crop'].value_counts()
+    diversity_factor = 1 / crop_freq
+    # Outlier removal
+    def remove_outliers(df, columns):
+        df_out = df.copy()
+        initial_shape = df.shape[0]
+        for col in columns:
+            Q1 = df_out[col].quantile(0.25)
+            Q3 = df_out[col].quantile(0.75)
+            IQR = Q3 - Q1
+            lower_bound = Q1 - 1.5 * IQR
+            upper_bound = Q3 + 1.5 * IQR
+            df_out = df_out[(df_out[col] >= lower_bound) & (df_out[col] <= upper_bound)]
+            initial_shape = df_out.shape[0]
+        return df_out
+    outlier_columns = ['Yield (Tonne/Hectare)', 'ALLSKY_SFC_SW_DWN', 'EVPTRNS', 'PRECTOTCORR',
+                       'RH2M', 'T2M', 'T2M_MAX', 'T2M_MIN', 'WS2M']
+    df_clean = remove_outliers(df_clean, outlier_columns)
+    # Functions (inner)
+    def get_historical_climate(district, season, df_clean, num_features, season_map):
+        district_data = df_clean[df_clean['District'] == district]
+        if district_data.empty:
+            return df_clean[num_features[:-2]].mean().to_dict()
+        season_num = season_map.get(season, 0)
+        season_data = district_data[district_data['Season'] == season_num]
+        if season_data.empty:
+            season_data = district_data
+        historical = season_data[num_features[:-2]].mean().to_dict()
+        return historical
+
+    def predict_suitability(district, crop, season='Kharif', year=2025, area=5000, climate_data=None, le_district=le_district, le_crop=le_crop, scaler=scaler, lgb_model=lgb_model, means=means, season_map=season_map, features=features, num_features=num_features, df_clean=df_clean):
+        try:
+            dist_enc = le_district.transform([district])[0]
+            crop_enc = le_crop.transform([crop])[0]
+            season_num = season_map[season]
+        except ValueError:
+            st.error(f"Invalid district '{district}' or crop '{crop}'. Use exact spelling (e.g., Ariyalur, Rice).")
+            return None, None, None
+        except KeyError:
+            st.error(f"Invalid season '{season}'. Choose from {list(season_map.keys())}.")
+            return None, None, None
+        if climate_data is None:
+            climate = get_realtime_climate(district)
+            if climate is None:
+                climate = get_historical_climate(district, season, df_clean, num_features, season_map)
+        else:
+            climate = climate_data
+        climate['ALLSKY_SFC_SW_DWN'] = df_clean['ALLSKY_SFC_SW_DWN'].mean()
+        climate['EVPTRNS'] = df_clean['EVPTRNS'].mean()
+        input_df = pd.DataFrame({
+            'Year': [year], 'District_Enc': [dist_enc], 'Crop_Enc': [crop_enc], 'Season': [season_num],
+            'Area_Hectare': [area]
+        })
+        for key in num_features[:-2]:
+            if key in climate:
+                input_df[key] = climate[key]
+            else:
+                input_df[key] = df_clean[key].mean()
+        input_df['Precip_Temp_Interact'] = input_df['PRECTOTCORR'] * input_df['T2M']
+        input_scaled = input_df[features].copy()
+        input_scaled[num_features] = scaler.transform(input_scaled[num_features])
+        try:
+            yield_pred = lgb_model.predict(input_scaled)[0]
+            thresh = means.get((district, crop), np.median(df_clean['Yield (Tonne/Hectare)']))
+            suitable = yield_pred > thresh
+            return yield_pred, suitable, thresh
+        except ValueError:
+            st.error(f"Error during prediction for district '{district}' or crop '{crop}'.")
+            return None, None, None
+
+    def suggest_crops(district, season, year=2025, top_k=2, climate_data=None, exclude_crop=None, sort_by='absolute', le_district=le_district, le_crop=le_crop, diversity_factor=diversity_factor, df_clean=df_clean, **kwargs):
+        try:
+            dist_enc = le_district.transform([district])[0]
+        except ValueError:
+            st.error(f"No crops found for district '{district}'.")
+            return []
+        possible_crops = df_clean[df_clean['District_Enc'] == dist_enc]['Crop'].unique()
+        if len(possible_crops) == 0:
+            st.error(f"No crops found for district '{district}'.")
+            return []
+        if climate_data is None:
+            climate = get_realtime_climate(district)
+            if climate is None:
+                climate = get_historical_climate(district, season, df_clean, num_features, season_map)
+        else:
+            climate = climate_data
+        preds = []
+        for crop in possible_crops:
+            if exclude_crop and crop == exclude_crop:
+                continue
+            yield_p, _, thresh = predict_suitability(district, crop, season, year, climate_data=climate, **kwargs)
+            if yield_p is not None:
+                if sort_by == 'relative':
+                    normalized_yield = yield_p / (thresh if thresh > 0 else 1)
+                    sort_key = normalized_yield
+                elif sort_by == 'balanced':
+                    div_factor = diversity_factor.get(crop, 1.0)
+                    sort_key = yield_p * div_factor
+                else:
+                    sort_key = yield_p
+                preds.append((crop, yield_p, sort_key))
+        return sorted(preds, key=lambda x: x[2], reverse=True)[:top_k]
+
+    return (lgb_model, le_district, le_crop, scaler, means, season_map, df_clean, diversity_factor,
+            features, num_features, get_historical_climate, predict_suitability, suggest_crops)
+
+# Load model
+api_key_input = st.sidebar.text_input("OpenWeatherMap API Key", type="password", value='a5c4d7596f1d44f689f39ccec6f68de4')
+lgb_model, le_district, le_crop, scaler, means, season_map, df_clean, diversity_factor, features, num_features, get_historical_climate, predict_suitability, suggest_crops = load_and_train_model(api_key_input)
+
+# Title from old code
 st.title("🌾 Crop Yield Prediction Chatbot")
 st.markdown("**Predict yields and get smart crop suggestions based on real-time weather.**")
-# Initialize session state for prediction persistence
-if 'predicted' not in st.session_state:
-    st.session_state.predicted = False
-if 'yield_p' not in st.session_state:
-    st.session_state.yield_p = None
-if 'suitable' not in st.session_state:
-    st.session_state.suitable = None
-if 'thresh' not in st.session_state:
-    st.session_state.thresh = None
-if 'suggestions' not in st.session_state:
-    st.session_state.suggestions = []
-if 'climate_msg' not in st.session_state:
-    st.session_state.climate_msg = None
-if 'user_district' not in st.session_state:
-    st.session_state.user_district = None
-if 'user_crop' not in st.session_state:
-    st.session_state.user_crop = None
-if 'user_season' not in st.session_state:
-    st.session_state.user_season = None
-if 'user_area' not in st.session_state:
-    st.session_state.user_area = 5000.0
-# User Inputs
-districts = list(le_district.classes_)
-crops = list(le_crop.classes_)
-seasons = list(season_map.keys())
-with st.sidebar:
-    st.header("🛠️ Settings")
-    st.write("**App Version**: 1.3 (Updated with Seasonal Aggregation & Diversity)")
-    if st.button("Reset Form"):
-        for key in list(st.session_state.keys()):
-            if key not in ['predicted', 'yield_p', 'suitable', 'thresh', 'suggestions', 'climate_msg', 'user_district', 'user_crop', 'user_season', 'user_area']:
-                del st.session_state[key]
-        st.session_state.predicted = False # Re-init flag
-        st.rerun()
-    # Layout with columns
-col1, col2 = st.columns([1, 2])
-with col1:
-    st.subheader("📝 Input Details")
-    with st.form("inputs_form"):
-        with st.expander("Select Parameters", expanded=True):
-            user_district = st.selectbox("🌍 District", districts, key="district", help="Choose a district (e.g., Ariyalur)")
-            user_crop = st.selectbox("🌾 Crop", crops, key="crop", help="Choose a crop (e.g., Rice)")
-            user_season = st.selectbox("☀️ Season", seasons, index=seasons.index('Kharif'), key="season", help="Choose a season")
-            user_area = st.number_input("📏 Area (Hectare)", min_value=1.0, value=5000.0, step=100.0, key="area")
-        # Full-width horizontal button
-        submitted = st.form_submit_button("🚀 Predict & Suggest", type="primary", use_container_width=True)
-with col2:
-    if st.session_state.predicted:
-        with st.spinner("Fetching weather and predicting..."):
-            # Fetch climate data once (but since persisted, show stored)
-            if st.session_state.climate_msg:
-                st.info(st.session_state.climate_msg)
-            # Predict Yield (use stored, but recompute if needed; here display stored)
-            st.subheader(f"Prediction for {st.session_state.user_crop} in {st.session_state.user_district} ({st.session_state.user_season})")
-            if st.session_state.yield_p is not None:
-                st.balloons() # Confetti animation (runs once per view)
-                st.success(f"Prediction complete! 🌟 Yield: {st.session_state.yield_p:.2f} T/Ha")
-                st.markdown('<div class="metric-card"><h3>Predicted Yield</h3><p>{:.2f} T/Ha</p></div>'.format(st.session_state.yield_p), unsafe_allow_html=True)
+
+# Chat history
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Display chat history with theme
+def display_chat_history():
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown('<div class="stChatMessage">' + message["content"] + '</div>', unsafe_allow_html=True)
+            if "suggestions" in message:
+                suggestions_df = pd.DataFrame([[crop, f"{yield_pred:.2f}"] for crop, yield_pred in message["suggestions"]], columns=['Crop', 'Predicted Yield (T/Ha)'])
+                st.table(suggestions_df.style.background_gradient(cmap='Greens'))
+            if "prediction" in message:
+                pred_data = message["prediction"]
+                st.markdown(f'<div class="metric-card"><h3>Predicted Yield</h3><p>{pred_data["yield"]:.2f} T/Ha</p></div>', unsafe_allow_html=True)
                 col_metrics1, col_metrics2 = st.columns(2)
                 with col_metrics1:
-                    st.metric("Suitability", "Yes" if st.session_state.suitable else "No", delta=f"vs Mean {st.session_state.thresh:.2f}")
+                    st.metric("Suitability", "Yes" if pred_data['suitable'] else "No", delta=f"vs Mean {pred_data['mean']:.2f}")
                 with col_metrics2:
-                    st.metric("Area Input", f"{st.session_state.user_area} Ha")
-                # Suggest Crops
-                st.subheader(f"💡 Top Alternative Crop Suggestions (balanced for diversity) for {st.session_state.user_district} ({st.session_state.user_season})")
-                if st.session_state.suggestions:
-                    suggestions_df = pd.DataFrame([[s[0], round(s[1], 2)] for s in st.session_state.suggestions], columns=['Crop', 'Predicted Yield (T/Ha)'])
-                    st.table(suggestions_df.style.background_gradient(cmap='Greens'))
+                    st.metric("Historical Mean", f"{pred_data['mean']:.2f} T/Ha")
+
+display_chat_history()
+
+# Chat input
+if prompt := st.chat_input("Type your query here (e.g., 'Suggest crops for Ariyalur in Kharif' or 'Predict rice yield in Coimbatore')"):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown('<div class="stChatMessage">' + prompt + '</div>', unsafe_allow_html=True)
+
+    # Parse query (improved)
+    def parse_query(query):
+        query_lower = query.lower()
+        district = None
+        crop = None
+        season = 'Kharif'
+        if "suggest" in query_lower or "recommend" in query_lower:
+            action = "suggest"
+            words = query_lower.split()
+            for i, w in enumerate(words):
+                if w in ['for', 'in']:
+                    if i+1 < len(words):
+                        potential_district = words[i+1]
+                        if potential_district in [d.lower() for d in le_district.classes_]:
+                            district = potential_district.capitalize()
+                            break
+            for w in words:
+                if w in ['kharif', 'rabi', 'autumn', 'summer', 'winter', 'whole year']:
+                    season = w.capitalize()
+                    break
+            if not district:
+                district = "Ariyalur"
+        elif "predict" in query_lower or "yield" in query_lower:
+            action = "predict"
+            words = query_lower.split()
+            for w in words:
+                if w in [c.lower() for c in le_crop.classes_]:
+                    crop = w.capitalize()
+                    break
+            if not crop:
+                crop = "Rice"
+            for i, w in enumerate(words):
+                if w in ['in']:
+                    if i+1 < len(words):
+                        potential_district = words[i+1]
+                        if potential_district in [d.lower() for d in le_district.classes_]:
+                            district = potential_district.capitalize()
+                            break
+            for w in words:
+                if w in ['kharif', 'rabi', 'autumn', 'summer', 'winter', 'whole year']:
+                    season = w.capitalize()
+                    break
+            if not district:
+                district = "Ariyalur"
+        else:
+            action = "unknown"
+        return action, {"district": district or "Ariyalur", "crop": crop, "season": season}
+
+    action, params = parse_query(prompt)
+    district = params["district"]
+    crop = params["crop"]
+    season = params["season"]
+
+    with st.chat_message("assistant"):
+        with st.spinner("Processing..."):
+            if action == "suggest":
+                climate = get_realtime_climate(district)
+                if climate is None:
+                    climate = get_historical_climate(district, season, df_clean, num_features, season_map)
+                suggestions = suggest_crops(district, season, climate_data=climate, top_k=3, exclude_crop=None, sort_by='absolute',
+                                            le_district=le_district, le_crop=le_crop, diversity_factor=diversity_factor, df_clean=df_clean)
+                response = f"Top 3 crop suggestions for {district} in {season}:"
+                st.markdown('<div class="stChatMessage">' + response + '</div>', unsafe_allow_html=True)
+                sugg_list = [(crop_s, yield_pred) for crop_s, yield_pred, _ in suggestions]
+                suggestions_df = pd.DataFrame([[s[0], f"{s[1]:.2f}"] for s in sugg_list], columns=['Crop', 'Predicted Yield (T/Ha)'])
+                st.table(suggestions_df.style.background_gradient(cmap='Greens'))
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": response,
+                    "suggestions": sugg_list
+                })
+                st.balloons()
+            elif action == "predict":
+                area = 5000
+                climate = get_realtime_climate(district)
+                if climate is None:
+                    climate = get_historical_climate(district, season, df_clean, num_features, season_map)
+                yield_p, suitable, thresh = predict_suitability(district, crop, season, area=area, climate_data=climate,
+                                                                le_district=le_district, le_crop=le_crop, scaler=scaler,
+                                                                lgb_model=lgb_model, means=means, season_map=season_map,
+                                                                features=features, num_features=num_features, df_clean=df_clean)
+                if yield_p is not None:
+                    response = f"Prediction for {crop} in {district} ({season}): {yield_p:.2f} T/Ha"
+                    st.markdown('<div class="stChatMessage">' + response + '</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="metric-card"><h3>Predicted Yield</h3><p>{yield_p:.2f} T/Ha</p></div>', unsafe_allow_html=True)
+                    col_metrics1, col_metrics2 = st.columns(2)
+                    with col_metrics1:
+                        st.metric("Suitability", "Yes" if suitable else "No", delta=f"vs Mean {thresh:.2f}")
+                    with col_metrics2:
+                        st.metric("Historical Mean", f"{thresh:.2f} T/Ha")
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": response,
+                        "prediction": {"yield": yield_p, "suitable": suitable, "mean": thresh}
+                    })
+                    st.balloons()
                 else:
-                    st.error("No crop suggestions available.")
+                    st.error("Prediction failed. Check district/crop names (e.g., Ariyalur, Rice).")
+                    st.session_state.messages.append({"role": "assistant", "content": "Prediction failed. Please check inputs."})
             else:
-                st.error("Prediction failed. Check inputs.")
-        # Button to hide results or new prediction
-        if st.button("New Prediction"):
-            st.session_state.predicted = False
-            st.rerun()
-if submitted:
-    # Update session state with current inputs
-    st.session_state.user_district = user_district
-    st.session_state.user_crop = user_crop
-    st.session_state.user_season = user_season
-    st.session_state.user_area = user_area
-    # Fetch climate data once
-    climate = get_realtime_climate(user_district)
-    if climate is None:
-        climate = get_historical_climate(user_district, user_season)
-        st.session_state.climate_msg = f"Using historical climate for {user_district} ({user_season}): Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm"
-    else:
-        st.session_state.climate_msg = f"Fetched real-time climate data for {user_district}: Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm (daily)"
-    # Predict Yield
-    yield_p, suitable, thresh = predict_suitability(user_district, user_crop, user_season, area=user_area, climate_data=climate)
-    st.session_state.yield_p = yield_p
-    st.session_state.suitable = suitable
-    st.session_state.thresh = thresh
-    # Suggest Crops (Updated: Use balanced sorting to reduce dominance of Maize/Onion)
-    suggestions = suggest_crops(user_district, user_season, year=2025, top_k=2, climate_data=climate,
-                                exclude_crop=user_crop, sort_by='balanced')
-    st.session_state.suggestions = suggestions
-    # Set flag
-    st.session_state.predicted = True
-    st.rerun() # Rerun to show results immediately
+                response = "I can help with crop suggestions or yield predictions! Try: 'Suggest crops for Ariyalur in Kharif' or 'Predict rice yield in Coimbatore'"
+                st.markdown('<div class="stChatMessage">' + response + '</div>', unsafe_allow_html=True)
+                st.session_state.messages.append({"role": "assistant", "content": response})
+
+# Sidebar from old code (adapted with icons in selectboxes)
+with st.sidebar:
+    st.header("🛠️ Settings")
+    st.write("**App Version**: 1.2")
+    if st.button("Reset Chat"):
+        st.session_state.messages = []
+        st.rerun()
+    st.header("📊 Quick Actions")
+    quick_action = st.selectbox("Choose Action", ["Predict Yield", "Suggest Crops", "View Insights"])
+    districts_list = list(le_district.classes_)
+    crops_list = list(le_crop.classes_)
+    # Add icons/emojis to options
+    district_options = [f"🏛️ {d}" for d in districts_list]  # Generic icon for districts
+    crop_options = {c: f"🌾 {c}" for c in crops_list}  # Generic for crops
+    season_options = ['🌾 Kharif', '❄️ Rabi', '🍂 Autumn', '☀️ Summer', '🌨️ Winter', '📅 Whole Year']
+    season_map_display = {opt.split(' ', 1)[1]: opt for opt in season_options}  # Map display to actual
+    if quick_action == "Predict Yield":
+        st.markdown("### Predict Yield")
+        selected_district_display = st.selectbox("🌍 District", district_options, index=0)
+        district = selected_district_display.split(' ', 1)[1] if ' ' in selected_district_display else selected_district_display
+        selected_crop_display = st.selectbox("🌾 Crop", list(crop_options.values()), index=0)
+        crop = selected_crop_display.split(' ', 1)[1] if ' ' in selected_crop_display else selected_crop_display
+        selected_season_display = st.selectbox("☀️ Season", season_options, index=0)
+        season = selected_season_display.split(' ', 1)[1] if ' ' in selected_season_display else selected_season_display
+        area = st.number_input("📏 Area (Ha)", value=5000.0)
+        if st.button("Predict", key="quick_predict"):
+            climate = get_realtime_climate(district)
+            if climate is None:
+                climate = get_historical_climate(district, season, df_clean, num_features, season_map)
+            yield_p, suitable, thresh = predict_suitability(district, crop, season, area=area, climate_data=climate,
+                                                            le_district=le_district, le_crop=le_crop, scaler=scaler,
+                                                            lgb_model=lgb_model, means=means, season_map=season_map,
+                                                            features=features, num_features=num_features, df_clean=df_clean)
+            if yield_p is not None:
+                st.success(f"Yield: {yield_p:.2f} T/Ha | Suitable: {'Yes' if suitable else 'No'} | Mean: {thresh:.2f}")
+    elif quick_action == "Suggest Crops":
+        st.markdown("### Suggest Crops")
+        selected_district_display = st.selectbox("🌍 District", district_options, index=0)
+        district = selected_district_display.split(' ', 1)[1] if ' ' in selected_district_display else selected_district_display
+        selected_season_display = st.selectbox("☀️ Season", season_options, index=0)
+        season = selected_season_display.split(' ', 1)[1] if ' ' in selected_season_display else selected_season_display
+        exclude = st.text_input("Exclude Crop", "")
+        if st.button("Suggest", key="quick_suggest"):
+            climate = get_realtime_climate(district)
+            if climate is None:
+                climate = get_historical_climate(district, season, df_clean, num_features, season_map)
+            suggestions = suggest_crops(district, season, climate_data=climate, top_k=3, exclude_crop=exclude, sort_by='absolute',
+                                        le_district=le_district, le_crop=le_crop, diversity_factor=diversity_factor, df_clean=df_clean)
+            suggestions_df = pd.DataFrame([[s[0], f"{s[1]:.2f}"] for s in suggestions], columns=['Crop', 'Predicted Yield (T/Ha)'])
+            st.table(suggestions_df.style.background_gradient(cmap='Greens'))
+    elif quick_action == "View Insights":
+        st.markdown("### Model Insights")
+        importance_df = pd.DataFrame({
+            'Feature': features,
+            'Importance': lgb_model.feature_importances_ / sum(lgb_model.feature_importances_)
+        }).sort_values('Importance', ascending=False).head(5)
+        fig, ax = plt.subplots(figsize=(8, 5))
+        sns.barplot(data=importance_df, x='Importance', y='Feature', ax=ax, palette='viridis')
+        ax.set_title('Top 5 Feature Importances')
+        st.pyplot(fig)
+        st.markdown("### Dataset Stats")
+        st.write(f"Districts: {df_clean['District'].nunique()}")
+        st.write(f"Crops: {df_clean['Crop'].nunique()}")
+        st.write(f"Seasons: {df_clean['Season'].nunique()}")
+

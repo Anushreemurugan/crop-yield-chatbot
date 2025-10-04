@@ -343,11 +343,7 @@ with col1:
         submitted = st.form_submit_button("🚀 Predict & Suggest", type="primary", use_container_width=True)
 with col2:
     if st.session_state.predicted:
-        with st.spinner("Fetching weather and predicting..."):
-            # Fetch climate data once (but since persisted, show stored)
-            if st.session_state.climate_msg:
-                st.info(st.session_state.climate_msg)
-            # Predict Yield
+                    # Predict Yield
             st.subheader(f"Prediction for {st.session_state.user_crop} in {st.session_state.user_district} ({st.session_state.user_season})")
             if st.session_state.yield_p is not None:
                 st.balloons() # Confetti animation

@@ -339,9 +339,9 @@ with col1:
     st.subheader("📝 Input Details")
     with st.form("inputs_form"):
         with st.expander("Select Parameters", expanded=True):
-            user_district = st.selectbox("🌍 District", district_options, index=districts_list.index("Thanjavur") if "Thanjavur" in districts_list else 0)
-            user_crop = st.selectbox("🌾 Crop", crop_options, index=crops_list.index("Rice") if "Rice" in crops_list else 0)
-            user_season = st.selectbox("☀️ Season", season_options, index=0)
+            user_district = st.selectbox("District", district_options, index=0)
+            user_crop = st.selectbox("Crop", crop_options, index=0)
+            user_season = st.selectbox("Season", season_options, index=0)
             user_area = st.number_input("📏 Area (Hectare)", min_value=1.0, value=5000.0, step=100.0)
         # Full-width horizontal button
         submitted = st.form_submit_button("🚀 Predict & Suggest", type="primary", use_container_width=True)

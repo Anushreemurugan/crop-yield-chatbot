@@ -322,7 +322,7 @@ crops_list = list(le_crop.classes_)
 seasons_list = list(season_map.keys())
 district_options = districts_list
 crop_options = crops_list
-season_options = seasons_list
+season_display_options = ['🌾 Kharif', '❄️ Rabi', '🍂 Autumn', '☀️ Summer', '🌨️ Winter', '📅 Whole Year']
 # User Inputs
 with st.sidebar:
     st.header("🛠️ Settings")
@@ -339,9 +339,10 @@ with col1:
     st.subheader("📝 Input Details")
     with st.form("inputs_form"):
         with st.expander("Select Parameters", expanded=True):
-            user_district = st.selectbox("District", district_options, index=0)
-            user_crop = st.selectbox("Crop", crop_options, index=0)
-            user_season = st.selectbox("Season", season_options, index=0)
+            user_district = st.selectbox("🌍 District", district_options, index=0)
+            user_crop = st.selectbox("🌾 Crop", crop_options, index=0)
+            user_season_display = st.selectbox("☀️ Season", season_display_options, index=0)
+            user_season = user_season_display.split(' ', 1)[1] if ' ' in user_season_display else user_season_display
             user_area = st.number_input("📏 Area (Hectare)", min_value=1.0, value=5000.0, step=100.0)
         # Full-width horizontal button
         submitted = st.form_submit_button("🚀 Predict & Suggest", type="primary", use_container_width=True)

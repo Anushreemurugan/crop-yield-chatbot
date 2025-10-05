@@ -69,7 +69,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 # Global variables
-API_KEY = 'a5c4d7596f1d44f689f39ccec6f68de4' # Default, will be updated from sidebar
+API_KEY = 'a5c4d7596f1d44f689f39ccec6f68de4'
 def get_district_coords(district):
     """Fetch latitude and longitude using OpenWeatherMap Geocoding API"""
     if API_KEY == 'YOUR_OPENWEATHERMAP_API_KEY':
@@ -115,9 +115,7 @@ def get_realtime_climate(district):
         st.error(f"Error fetching weather data for {district}: {e}. Using historical averages.")
         return None
 @st.cache_data
-def load_and_train_model(_api_key):
-    global API_KEY
-    API_KEY = _api_key
+def load_and_train_model():
     # Load and Preprocess Data (matching notebook exactly)
     df = pd.read_excel('merged_monthly_dataset.xlsx')
     # Fix: Extract the starting year from "2013-2014" format
@@ -211,8 +209,7 @@ def load_and_train_model(_api_key):
     # Return only serializable objects
     return lgb_model, le_district, le_crop, scaler, means, season_map, df_clean, diversity_factor, features, num_features
 # Load serializable model parts
-api_key_input = st.sidebar.text_input("OpenWeatherMap API Key", type="password", value='a5c4d7596f1d44f689f39ccec6f68de4')
-lgb_model, le_district, le_crop, scaler, means, season_map, df_clean, diversity_factor, features, num_features = load_and_train_model(api_key_input)
+lgb_model, le_district, le_crop, scaler, means, season_map, df_clean, diversity_factor, features, num_features = load_and_train_model()
 # Define functions after loading (not cached)
 def get_historical_climate(district, season):
     district_data = df_clean[df_clean['District'] == district]
@@ -323,9 +320,9 @@ if 'user_area' not in st.session_state:
 districts_list = list(le_district.classes_)
 crops_list = list(le_crop.classes_)
 seasons_list = list(season_map.keys())
-district_options = [f"🏛️ {d}" for d in districts_list]
-crop_options = [f"🌾 {c}" for c in crops_list]
-season_options = ['🌾 Kharif', '❄️ Rabi', '🍂 Autumn', '☀️ Summer', '🌨️ Winter', '📅 Whole Year']
+district_options = districts_list
+crop_options = crops_list
+season_options = seasons_list
 # User Inputs
 with st.sidebar:
     st.header("🛠️ Settings")
@@ -342,12 +339,9 @@ with col1:
     st.subheader("📝 Input Details")
     with st.form("inputs_form"):
         with st.expander("Select Parameters", expanded=True):
-            selected_district_display = st.selectbox("🌍 District", district_options, index=districts_list.index("Thanjavur") if "Thanjavur" in districts_list else 0)
-            user_district = selected_district_display.split(' ', 1)[1]
-            selected_crop_display = st.selectbox("🌾 Crop", crop_options, index=crops_list.index("Rice") if "Rice" in crops_list else 0)
-            user_crop = selected_crop_display.split(' ', 1)[1]
-            selected_season_display = st.selectbox("☀️ Season", season_options, index=0)
-            user_season = selected_season_display.split(' ', 1)[1]
+            user_district = st.selectbox("🌍 District", district_options, index=districts_list.index("Thanjavur") if "Thanjavur" in districts_list else 0)
+            user_crop = st.selectbox("🌾 Crop", crop_options, index=crops_list.index("Rice") if "Rice" in crops_list else 0)
+            user_season = st.selectbox("☀️ Season", season_options, index=0)
             user_area = st.number_input("📏 Area (Hectare)", min_value=1.0, value=5000.0, step=100.0)
         # Full-width horizontal button
         submitted = st.form_submit_button("🚀 Predict & Suggest", type="primary", use_container_width=True)

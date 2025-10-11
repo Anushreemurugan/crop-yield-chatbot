@@ -348,13 +348,14 @@ with col1:
         submitted = st.form_submit_button("🚀 Predict & Suggest", type="primary", use_container_width=True)
 with col2:
     if st.session_state.predicted:
-        if st.session_state.yield_p is not None:
-            with st.spinner("Revealing your prediction..."):
-                # Fetch climate data once (but since persisted, show stored)
-                if st.session_state.climate_msg:
-                    st.info(st.session_state.climate_msg)
-                # Predict Yield
-                st.subheader(f"Prediction for {st.session_state.user_crop} in {st.session_state.user_district} ({st.session_state.user_season})")
+        with st.spinner("Fetching weather and predicting..."):
+            # Fetch climate data once (but since persisted, show stored)
+            if st.session_state.climate_msg:
+                st.info(st.session_state.climate_msg)
+            # Predict Yield
+            st.subheader(f"Prediction for {st.session_state.user_crop} in {st.session_state.user_district} ({st.session_state.user_season})")
+            if st.session_state.yield_p is not None:
+                st.balloons() # Confetti animation
                 st.success(f"Prediction complete! 🌟 Yield: {st.session_state.yield_p:.2f} T/Ha")
                 st.markdown(f'<div class="metric-card"><h3>Predicted Yield</h3><p>{st.session_state.yield_p:.2f} T/Ha</p></div>', unsafe_allow_html=True)
                 col_metrics1, col_metrics2 = st.columns(2)
@@ -369,8 +370,8 @@ with col2:
                     st.table(suggestions_df.style.background_gradient(cmap='Greens'))
                 else:
                     st.error("No crop suggestions available.")
-        else:
-            st.error("Prediction failed. Check inputs.")
+            else:
+                st.error("Prediction failed. Check inputs.")
         # Button to hide results or new prediction
         if st.button("New Prediction"):
             st.session_state.predicted = False

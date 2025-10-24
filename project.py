@@ -12,6 +12,7 @@ import requests
 from datetime import datetime
 import io
 import base64
+
 # Page config matching old code
 st.set_page_config(
     page_title="Crop Yield Predictor",
@@ -19,6 +20,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
 # Custom CSS from old code
 st.markdown("""
 <style>
@@ -68,8 +70,10 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
 # Global variables
 API_KEY = 'a5c4d7596f1d44f689f39ccec6f68de4'
+
 def get_district_coords(district):
     """Fetch latitude and longitude using OpenWeatherMap Geocoding API"""
     if API_KEY == 'YOUR_OPENWEATHERMAP_API_KEY':
@@ -88,6 +92,7 @@ def get_district_coords(district):
     except requests.RequestException as e:
         st.error(f"Error fetching coordinates for {district}: {e}. Using historical averages.")
         return None
+
 def get_realtime_climate(district):
     """Fetch current weather data using coordinates from Geocoding API"""
     coords = get_district_coords(district)
@@ -114,6 +119,7 @@ def get_realtime_climate(district):
     except requests.RequestException as e:
         st.error(f"Error fetching weather data for {district}: {e}. Using historical averages.")
         return None
+
 @st.cache_data
 def load_and_train_model():
     # Load and Preprocess Data (matching notebook exactly)
@@ -208,8 +214,10 @@ def load_and_train_model():
     df_clean = remove_outliers(df_clean, outlier_columns)
     # Return only serializable objects
     return lgb_model, le_district, le_crop, scaler, means, season_map, df_clean, diversity_factor, features, num_features
+
 # Load serializable model parts
 lgb_model, le_district, le_crop, scaler, means, season_map, df_clean, diversity_factor, features, num_features = load_and_train_model()
+
 # Define functions after loading (not cached)
 def get_historical_climate(district, season):
     district_data = df_clean[df_clean['District'] == district]
@@ -221,6 +229,7 @@ def get_historical_climate(district, season):
         season_data = district_data # Fallback to all seasons
     historical = season_data[num_features[:-2]].mean().to_dict()
     return historical
+
 def predict_suitability(district, crop, season='Kharif', year=2025, area=5000, climate_data=None):
     try:
         dist_enc = le_district.transform([district])[0]
@@ -259,6 +268,7 @@ def predict_suitability(district, crop, season='Kharif', year=2025, area=5000, c
     except ValueError:
         st.error(f"Error during prediction for district '{district}' or crop '{crop}'.")
         return None, None, None
+
 def suggest_crops(district, season, year=2025, top_k=2, climate_data=None, exclude_crop=None, sort_by='balanced'):
     try:
         dist_enc = le_district.transform([district])[0]
@@ -293,8 +303,10 @@ def suggest_crops(district, season, year=2025, top_k=2, climate_data=None, exclu
             preds.append((crop, yield_p, sort_key))
     # Sort by the chosen key
     return sorted(preds, key=lambda x: x[2], reverse=True)[:top_k]
+
 # Title from old code
 st.title("🌾 Crop Yield Predictor")
+
 # Initialize session state for prediction persistence
 if 'predicted' not in st.session_state:
     st.session_state.predicted = False
@@ -316,6 +328,7 @@ if 'user_season' not in st.session_state:
     st.session_state.user_season = None
 if 'user_area' not in st.session_state:
     st.session_state.user_area = 5000.0
+
 # Districts, Crops, Seasons with icons
 districts_list = list(le_district.classes_)
 crops_list = list(le_crop.classes_)
@@ -323,6 +336,7 @@ seasons_list = list(season_map.keys())
 district_options = districts_list
 crop_options = crops_list
 season_display_options = ['🌾 Kharif', '❄️ Rabi', '🍂 Autumn', '☀️ Summer', '🌨️ Winter', '📅 Whole Year']
+
 # User Inputs
 with st.sidebar:
     st.header("🛠️ Settings")
@@ -333,6 +347,7 @@ with st.sidebar:
                 del st.session_state[key]
         st.session_state.predicted = False
         st.rerun()
+
 # Layout with columns
 col1, col2 = st.columns([1, 2])
 with col1:
@@ -346,6 +361,7 @@ with col1:
             user_area = st.number_input("📏 Area (Hectare)", min_value=1.0, value=5000.0, step=100.0)
         # Full-width horizontal button
         submitted = st.form_submit_button("🚀 Predict & Suggest", type="primary", use_container_width=True)
+
 with col2:
     if st.session_state.predicted:
         with st.spinner("Fetching weather and predicting..."):
@@ -376,6 +392,7 @@ with col2:
         if st.button("New Prediction"):
             st.session_state.predicted = False
             st.rerun()
+
 if submitted:
     # Update session state with current inputs
     st.session_state.user_district = user_district
@@ -386,7 +403,8 @@ if submitted:
     climate = get_realtime_climate(user_district)
     if climate is None:
         climate = get_historical_climate(user_district, user_season)
-            else:
+        st.session_state.climate_msg = f"Using historical climate data for {user_district}."
+    else:
         st.session_state.climate_msg = f"Fetched real-time climate data for {user_district}: Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm (daily)"
     # Predict Yield
     yield_p, suitable, thresh = predict_suitability(user_district, user_crop, user_season, area=user_area, climate_data=climate)

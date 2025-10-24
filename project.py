@@ -333,9 +333,10 @@ if 'user_area' not in st.session_state:
 districts_list = list(le_district.classes_)
 crops_list = list(le_crop.classes_)
 seasons_list = list(season_map.keys())
-district_options = districts_list
-crop_options = crops_list
+district_options = ["Select District"] + districts_list
+crop_options = ["Select Crop"] + crops_list
 season_display_options = ['🌾 Kharif', '❄️ Rabi', '🍂 Autumn', '☀️ Summer', '🌨️ Winter']
+season_display_options_full = ["Select Season"] + season_display_options
 
 # User Inputs
 with st.sidebar:
@@ -356,8 +357,8 @@ with col1:
         with st.expander("Select Parameters", expanded=True):
             user_district = st.selectbox("🌍 District", district_options, index=0)
             user_crop = st.selectbox("🌾 Crop", crop_options, index=0)
-            user_season_display = st.selectbox("☀️ Season", season_display_options, index=0)
-            user_season = user_season_display.split(' ', 1)[1] if ' ' in user_season_display else user_season_display
+            user_season_display = st.selectbox("☀️ Season", season_display_options_full, index=0)
+            user_season = user_season_display.split(' ', 1)[1] if len(user_season_display.split(' ', 1)) > 1 and not user_season_display.startswith("Select") else user_season_display
             user_area = st.number_input("📏 Area (Hectare)", min_value=1.0, value=5000.0, step=100.0)
         # Full-width horizontal button
         submitted = st.form_submit_button("🚀 Predict & Suggest", type="primary", use_container_width=True)
@@ -394,25 +395,30 @@ with col2:
             st.rerun()
 
 if submitted:
-    # Update session state with current inputs
-    st.session_state.user_district = user_district
-    st.session_state.user_crop = user_crop
-    st.session_state.user_season = user_season
-    st.session_state.user_area = user_area
-    # Fetch climate data once
-    climate = get_realtime_climate(user_district)
-    if climate is None:
-        climate = get_historical_climate(user_district, user_season)
-        st.session_state.climate_msg = f"Using historical climate data for {user_district}."
-   
-    # Predict Yield
-    yield_p, suitable, thresh = predict_suitability(user_district, user_crop, user_season, area=user_area, climate_data=climate)
-    st.session_state.yield_p = yield_p
-    st.session_state.suitable = suitable
-    st.session_state.thresh = thresh
-    # Suggest Crops
-    suggestions = suggest_crops(user_district, user_season, exclude_crop=user_crop, year=2025, top_k=2, climate_data=climate, sort_by='balanced')
-    st.session_state.suggestions = suggestions
-    # Set flag
-    st.session_state.predicted = True
-    st.rerun() # Rerun to show results immediately
+    # Check for placeholder selections
+    if user_district == "Select District" or user_crop == "Select Crop" or user_season_display == "Select Season":
+        st.error("Please select all parameters (District, Crop, and Season).")
+        st.session_state.predicted = False
+    else:
+        # Update session state with current inputs
+        st.session_state.user_district = user_district
+        st.session_state.user_crop = user_crop
+        st.session_state.user_season = user_season
+        st.session_state.user_area = user_area
+        # Fetch climate data once
+        climate = get_realtime_climate(user_district)
+        if climate is None:
+            climate = get_historical_climate(user_district, user_season)
+            st.session_state.climate_msg = f"Using historical climate data for {user_district}."
+       
+        # Predict Yield
+        yield_p, suitable, thresh = predict_suitability(user_district, user_crop, user_season, area=user_area, climate_data=climate)
+        st.session_state.yield_p = yield_p
+        st.session_state.suitable = suitable
+        st.session_state.thresh = thresh
+        # Suggest Crops
+        suggestions = suggest_crops(user_district, user_season, exclude_crop=user_crop, year=2025, top_k=2, climate_data=climate, sort_by='balanced')
+        st.session_state.suggestions = suggestions
+        # Set flag
+        st.session_state.predicted = True
+        st.rerun() # Rerun to show results immediately

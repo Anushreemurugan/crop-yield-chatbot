@@ -364,7 +364,7 @@ with col2:
                 with col_metrics2:
                     st.metric("Area Input", f"{st.session_state.user_area} Ha")
                 # Suggest Crops
-                st.subheader(f"💡 Top Alternative Crop Suggestions (balanced for diversity) for {st.session_state.user_district} ({st.session_state.user_season})")
+                st.subheader(f"💡 Top Alternative Crop Suggestions for {st.session_state.user_district} ({st.session_state.user_season})")
                 if st.session_state.suggestions:
                     suggestions_df = pd.DataFrame([[s[0], round(s[1], 2)] for s in st.session_state.suggestions], columns=['Crop', 'Predicted Yield (T/Ha)'])
                     st.table(suggestions_df.style.background_gradient(cmap='Greens'))

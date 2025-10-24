@@ -335,7 +335,7 @@ crops_list = list(le_crop.classes_)
 seasons_list = list(season_map.keys())
 district_options = districts_list
 crop_options = crops_list
-season_display_options = ['🌾 Kharif', '❄️ Rabi', '🍂 Autumn', '☀️ Summer', '🌨️ Winter', '📅 Whole Year']
+season_display_options = ['🌾 Kharif', '❄️ Rabi', '🍂 Autumn', '☀️ Summer', '🌨️ Winter']
 
 # User Inputs
 with st.sidebar:

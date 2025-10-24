@@ -328,34 +328,24 @@ if 'user_season' not in st.session_state:
     st.session_state.user_season = None
 if 'user_area' not in st.session_state:
     st.session_state.user_area = 5000.0
-if 'district_index' not in st.session_state:
-    st.session_state.district_index = 0
-if 'crop_index' not in st.session_state:
-    st.session_state.crop_index = 0
-if 'season_index' not in st.session_state:
-    st.session_state.season_index = 0
 
 # Districts, Crops, Seasons with icons
 districts_list = list(le_district.classes_)
 crops_list = list(le_crop.classes_)
 seasons_list = list(season_map.keys())
-district_options = ["Select District"] + districts_list
-crop_options = ["Select Crop"] + crops_list
-season_display_options = ['🌾 Kharif', '❄️ Rabi', '🍂 Autumn', '☀️ Summer', '🌨️ Winter', '🌍 Whole Year']
-season_display_options_full = ["Select Season"] + season_display_options
+district_options = districts_list
+crop_options = crops_list
+season_display_options = ['🌾 Kharif', '❄️ Rabi', '🍂 Autumn', '☀️ Summer', '🌨️ Winter']
 
 # User Inputs
 with st.sidebar:
     st.header("🛠️ Settings")
     st.write("**App Version**: 1.3")
     if st.button("Reset Form"):
-        for key in ['predicted', 'yield_p', 'suitable', 'thresh', 'suggestions', 'climate_msg', 'user_district', 'user_crop', 'user_season', 'user_area', 'district_index', 'crop_index', 'season_index']:
+        for key in ['predicted', 'yield_p', 'suitable', 'thresh', 'suggestions', 'climate_msg', 'user_district', 'user_crop', 'user_season', 'user_area']:
             if key in st.session_state:
                 del st.session_state[key]
         st.session_state.predicted = False
-        st.session_state.district_index = 0
-        st.session_state.crop_index = 0
-        st.session_state.season_index = 0
         st.rerun()
 
 # Layout with columns
@@ -364,33 +354,11 @@ with col1:
     st.subheader("📝 Input Details")
     with st.form("inputs_form"):
         with st.expander("Select Parameters", expanded=True):
-            user_district_display = st.selectbox("🌍 District", district_options, index=st.session_state.district_index, key="district_key")
-            if user_district_display == "Select District":
-                user_district = None
-            else:
-                user_district = user_district_display
-                st.session_state.district_index = district_options.index(user_district_display)
-            
-            user_crop_display = st.selectbox("🌾 Crop", crop_options, index=st.session_state.crop_index, key="crop_key")
-            if user_crop_display == "Select Crop":
-                user_crop = None
-            else:
-                user_crop = user_crop_display
-                st.session_state.crop_index = crop_options.index(user_crop_display)
-            
-            user_season_display = st.selectbox("☀️ Season", season_display_options_full, index=st.session_state.season_index, key="season_key")
-            if user_season_display == "Select Season":
-                user_season = None
-            else:
-                parts = user_season_display.split(' ', 1)
-                if len(parts) > 1:
-                    user_season = parts[1]
-                else:
-                    user_season = user_season_display
-                st.session_state.season_index = season_display_options_full.index(user_season_display)
-            
-            user_area = st.number_input("📏 Area (Hectare)", min_value=1.0, value=st.session_state.user_area, step=100.0, key="area_key")
-            st.session_state.user_area = user_area
+            user_district = st.selectbox("🌍 District", district_options, index=0)
+            user_crop = st.selectbox("🌾 Crop", crop_options, index=0)
+            user_season_display = st.selectbox("☀️ Season", season_display_options, index=0)
+            user_season = user_season_display.split(' ', 1)[1] if ' ' in user_season_display else user_season_display
+            user_area = st.number_input("📏 Area (Hectare)", min_value=1.0, value=5000.0, step=100.0)
         # Full-width horizontal button
         submitted = st.form_submit_button("🚀 Predict & Suggest", type="primary", use_container_width=True)
 
@@ -426,28 +394,25 @@ with col2:
             st.rerun()
 
 if submitted:
-    # Check for placeholder selections
-    if user_district is None or user_crop is None or user_season is None:
-        st.error("Please select valid District, Crop, and Season (not placeholders).")
-    else:
-        # Update session state with current inputs
-        st.session_state.user_district = user_district
-        st.session_state.user_crop = user_crop
-        st.session_state.user_season = user_season
-        # Fetch climate data once
-        climate = get_realtime_climate(user_district)
-        if climate is None:
-            climate = get_historical_climate(user_district, user_season)
-            st.session_state.climate_msg = f"Using historical climate data for {user_district}."
-       
-        # Predict Yield
-        yield_p, suitable, thresh = predict_suitability(user_district, user_crop, user_season, area=user_area, climate_data=climate)
-        st.session_state.yield_p = yield_p
-        st.session_state.suitable = suitable
-        st.session_state.thresh = thresh
-        # Suggest Crops
-        suggestions = suggest_crops(user_district, user_season, exclude_crop=user_crop, year=2025, top_k=2, climate_data=climate, sort_by='balanced')
-        st.session_state.suggestions = suggestions
-        # Set flag
-        st.session_state.predicted = True
-        st.rerun() # Rerun to show results immediately
+    # Update session state with current inputs
+    st.session_state.user_district = user_district
+    st.session_state.user_crop = user_crop
+    st.session_state.user_season = user_season
+    st.session_state.user_area = user_area
+    # Fetch climate data once
+    climate = get_realtime_climate(user_district)
+    if climate is None:
+        climate = get_historical_climate(user_district, user_season)
+        st.session_state.climate_msg = f"Using historical climate data for {user_district}."
+   
+    # Predict Yield
+    yield_p, suitable, thresh = predict_suitability(user_district, user_crop, user_season, area=user_area, climate_data=climate)
+    st.session_state.yield_p = yield_p
+    st.session_state.suitable = suitable
+    st.session_state.thresh = thresh
+    # Suggest Crops
+    suggestions = suggest_crops(user_district, user_season, exclude_crop=user_crop, year=2025, top_k=2, climate_data=climate, sort_by='balanced')
+    st.session_state.suggestions = suggestions
+    # Set flag
+    st.session_state.predicted = True
+    st.rerun() # Rerun to show results immediately

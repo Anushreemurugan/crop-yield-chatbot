@@ -386,8 +386,7 @@ if submitted:
     climate = get_realtime_climate(user_district)
     if climate is None:
         climate = get_historical_climate(user_district, user_season)
-        st.session_state.climate_msg = f"Using historical climate for {user_district}: Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm"
-    else:
+            else:
         st.session_state.climate_msg = f"Fetched real-time climate data for {user_district}: Temp={climate['T2M']:.1f}°C, Humidity={climate['RH2M']}%, Precip={climate['PRECTOTCORR']}mm (daily)"
     # Predict Yield
     yield_p, suitable, thresh = predict_suitability(user_district, user_crop, user_season, area=user_area, climate_data=climate)

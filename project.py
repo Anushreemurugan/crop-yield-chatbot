@@ -376,7 +376,7 @@ with col2:
                 st.markdown(f'<div class="metric-card"><h3>Predicted Yield</h3><p>{st.session_state.yield_p:.2f} T/Ha</p></div>', unsafe_allow_html=True)
                 col_metrics1, col_metrics2 = st.columns(2)
                 with col_metrics1:
-                    st.metric("Suitability", "Yes" if st.session_state.suitable else "No", delta=f"vs Mean {st.session_state.thresh:.2f}")
+                    st.metric("Suitability", "Yes" if st.session_state.suitable else "No"")
                 with col_metrics2:
                     st.metric("Area Input", f"{st.session_state.user_area} Ha")
                 # Suggest Crops

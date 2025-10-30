@@ -117,6 +117,8 @@ st.markdown("""
         border-radius: 8px !important;
         padding: 8px !important;
         margin: 4px 0 !important;
+        display: flex !important;
+        align-items: center !important;
     }
     [data-testid="stNumberInput"] input[type="number"] {
         background-color: transparent !important;
@@ -124,11 +126,19 @@ st.markdown("""
         color: var(--widget-text-light) !important;
         outline: none !important;
         width: 100% !important;
+        padding: 0 8px !important;
     }
     [data-testid="stNumberInput"] div[role="button"] {
         background-color: var(--widget-border-light) !important;
         border: 1px solid var(--widget-border-light) !important;
         color: var(--card-bg-light) !important;
+        border-radius: 4px !important;
+        min-width: 24px !important;
+        height: 24px !important;
+        margin: 0 4px !important;
+    }
+    [data-testid="stNumberInput"] div[role="button"]:hover {
+        background-color: #45a049 !important;
     }
     /* Dark mode overrides for widgets */
     @media (prefers-color-scheme: dark) {
@@ -154,6 +164,9 @@ st.markdown("""
             background-color: var(--widget-border-dark) !important;
             border: 1px solid var(--widget-border-dark) !important;
             color: var(--card-bg-dark) !important;
+        }
+        [data-testid="stNumberInput"] div[role="button"]:hover {
+            background-color: #66bb6a !important;
         }
         [data-testid="stSelectbox"] > label > div,
         [data-testid="stNumberInput"] > label > div {

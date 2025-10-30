@@ -21,21 +21,52 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS from old code
+# Custom CSS from old code, updated for dark mode compatibility
 st.markdown("""
 <style>
+    /* Theme-aware backgrounds and text colors */
+    :root {
+        --bg-gradient-light: linear-gradient(to bottom, #f0f8f0, #e8f5e8);
+        --bg-gradient-dark: linear-gradient(to bottom, #1b5e20, #2e7d32);
+        --text-primary-light: #000000;
+        --text-primary-dark: #ffffff;
+        --card-bg-light: #ffffff;
+        --card-bg-dark: #2e7d32;
+        --card-border-light: #4caf50;
+        --card-border-dark: #81c784;
+        --metric-text-light: #000000;
+        --metric-text-dark: #ffffff;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --bg-gradient-light: var(--bg-gradient-dark);
+            --bg-gradient-dark: var(--bg-gradient-dark);
+            --text-primary-light: var(--text-primary-dark);
+            --text-primary-dark: var(--text-primary-dark);
+            --card-bg-light: var(--card-bg-dark);
+            --card-bg-dark: var(--card-bg-dark);
+            --card-border-light: var(--card-border-dark);
+            --card-border-dark: var(--card-border-dark);
+            --metric-text-light: var(--metric-text-dark);
+            --metric-text-dark: var(--metric-text-dark);
+        }
+    }
+
     /* Background and header */
     .stApp {
-        background: linear-gradient(to bottom, #f0f8f0, #e8f5e8);
+        background: var(--bg-gradient-light);
+        color: var(--text-primary-light);
     }
     .stApp > header {
-        background-color: #2e7d32; /* Dark green header */
+        background-color: #2e7d32; /* Dark green header - kept consistent */
         color: white;
     }
     /* Fonts and spacing */
     .stMarkdown {
         font-family: 'Segoe UI', sans-serif;
         font-size: 16px;
+        color: var(--text-primary-light);
     }
     /* Button styling */
     .stButton > button {
@@ -51,22 +82,53 @@ st.markdown("""
         width: 100%;
         justify-content: center;
     }
-    /* Metric cards */
+    /* Metric cards - theme-aware */
     .metric-card {
-        background-color: white;
+        background-color: var(--card-bg-light);
+        color: var(--metric-text-light);
         padding: 1rem;
         border-radius: 10px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        border-left: 5px solid #4caf50;
+        border-left: 5px solid var(--card-border-light);
         margin: 1rem 0;
     }
     /* Chat messages for theme consistency */
     .stChatMessage {
-        background-color: #e8f5e8;
+        background-color: var(--card-bg-light);
+        color: var(--metric-text-light);
         border-radius: 10px;
         padding: 1rem;
         margin: 0.5rem 0;
-        border-left: 5px solid #4caf50;
+        border-left: 5px solid var(--card-border-light);
+    }
+    /* Ensure Streamlit elements adapt */
+    [data-testid="stMetricLabel"] {
+        color: var(--metric-text-light);
+    }
+    [data-testid="stMetricValue"] {
+        color: var(--metric-text-light);
+    }
+    /* Sidebar adjustments for dark mode */
+    section[data-testid="stSidebar"] {
+        background-color: var(--card-bg-light);
+        color: var(--text-primary-light);
+    }
+    @media (prefers-color-scheme: dark) {
+        section[data-testid="stSidebar"] {
+            background-color: var(--card-bg-dark);
+            color: var(--text-primary-dark);
+        }
+    }
+    /* Table styling for better contrast */
+    .dataframe {
+        background-color: var(--card-bg-light);
+        color: var(--text-primary-light);
+    }
+    @media (prefers-color-scheme: dark) {
+        .dataframe {
+            background-color: var(--card-bg-dark);
+            color: var(--text-primary-dark);
+        }
     }
 </style>
 """, unsafe_allow_html=True)

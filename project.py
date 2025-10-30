@@ -507,12 +507,10 @@ with st.sidebar:
     # Short help bar
     with st.expander("ℹ️ Help", expanded=False):
         st.info("""
-        **Quick Tips:**
-        - Select district, crop, season, and area.
-        - Click **Predict & Suggest** for results.
-        - Suitability compares to historical means.
-        - Uses real-time weather or historical data.
-        - Suggestions prioritize yield & diversity.
+        **Steps to Use:**
+        - Select crop, district, season
+        - Enter area in hectare
+        - Click Predict & Suggest
         """)
 
 # Layout with columns

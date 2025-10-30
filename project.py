@@ -358,6 +358,18 @@ def load_and_train_model():
 # Load serializable model parts
 lgb_model, le_district, le_crop, scaler, means, season_map, df_clean, diversity_factor, features, num_features = load_and_train_model()
 
+# Custom crop options with renaming and filtering
+original_crops = list(le_crop.classes_)
+rename_dict = {
+    'Moong(Green Gram)': 'Green Gram',
+    'Cotton(lint)': 'Cotton',
+    'Cowpea(Lobia)': 'Cowpea'
+}
+unwanted_crops = ['Other Kharif pulses', 'Other Cereals', 'Other Rabi pulses', 'Small millets']
+filtered_crops = [crop for crop in original_crops if crop not in unwanted_crops]
+crop_display_options = [rename_dict.get(crop, crop) for crop in filtered_crops]
+display_to_original = {display: original for display, original in zip(crop_display_options, filtered_crops)}
+
 # Define functions after loading (not cached)
 def get_historical_climate(district, season):
     district_data = df_clean[df_clean['District'] == district]
@@ -371,12 +383,14 @@ def get_historical_climate(district, season):
     return historical
 
 def predict_suitability(district, crop, season='Kharif', year=2025, area=5000, climate_data=None):
+    # Map display crop to original if necessary
+    original_crop = display_to_original.get(crop, crop)
     try:
         dist_enc = le_district.transform([district])[0]
-        crop_enc = le_crop.transform([crop])[0]
+        crop_enc = le_crop.transform([original_crop])[0]
         season_num = season_map[season]
     except ValueError:
-        st.error(f"Invalid district '{district}' or crop '{crop}'. Use exact spelling (e.g., Ariyalur, Rice).")
+        st.error(f"Invalid district '{district}' or crop '{original_crop}'. Use exact spelling (e.g., Ariyalur, Rice).")
         return None, None, None
     except KeyError:
         st.error(f"Invalid season '{season}'. Choose from {list(season_map.keys())}.")
@@ -402,21 +416,24 @@ def predict_suitability(district, crop, season='Kharif', year=2025, area=5000, c
     input_scaled[num_features] = scaler.transform(input_scaled[num_features])
     try:
         yield_pred = lgb_model.predict(input_scaled)[0]
-        thresh = means.get((district, crop), np.median(df_clean['Yield (Tonne/Hectare)']))
+        thresh = means.get((district, original_crop), np.median(df_clean['Yield (Tonne/Hectare)']))
         suitable = yield_pred > thresh
         return yield_pred, suitable, thresh
     except ValueError:
-        st.error(f"Error during prediction for district '{district}' or crop '{crop}'.")
+        st.error(f"Error during prediction for district '{district}' or crop '{original_crop}'.")
         return None, None, None
 
 def suggest_crops(district, season, year=2025, top_k=2, climate_data=None, exclude_crop=None, sort_by='balanced'):
+    # Map exclude_crop to original if necessary
+    original_exclude = display_to_original.get(exclude_crop, exclude_crop) if exclude_crop else None
     try:
         dist_enc = le_district.transform([district])[0]
     except ValueError:
         st.error(f"No crops found for district '{district}'.")
         return []
-    possible_crops = df_clean[df_clean['District_Enc'] == dist_enc]['Crop'].unique()
-    if len(possible_crops) == 0:
+    # Filter possible crops to exclude unwanted
+    possible_crops_original = [crop for crop in df_clean[df_clean['District_Enc'] == dist_enc]['Crop'].unique() if crop not in unwanted_crops]
+    if len(possible_crops_original) == 0:
         st.error(f"No crops found for district '{district}'.")
         return []
     # Fetch climate data once if not provided
@@ -427,20 +444,21 @@ def suggest_crops(district, season, year=2025, top_k=2, climate_data=None, exclu
     else:
         climate = climate_data
     preds = []
-    for crop in possible_crops:
-        if exclude_crop and crop == exclude_crop:
+    for original_crop in possible_crops_original:
+        if original_exclude and original_crop == original_exclude:
             continue
-        yield_p, _, thresh = predict_suitability(district, crop, season, year, climate_data=climate)
+        display_crop = rename_dict.get(original_crop, original_crop)
+        yield_p, _, thresh = predict_suitability(district, display_crop, season, year, climate_data=climate)
         if yield_p is not None:
             if sort_by == 'relative':
                 normalized_yield = yield_p / (thresh if thresh > 0 else 1)
                 sort_key = normalized_yield
             elif sort_by == 'balanced':
-                div_factor = diversity_factor.get(crop, 1.0)
+                div_factor = diversity_factor.get(original_crop, 1.0)
                 sort_key = yield_p * div_factor
             else: # 'absolute'
                 sort_key = yield_p
-            preds.append((crop, yield_p, sort_key))
+            preds.append((display_crop, yield_p, sort_key))
     # Sort by the chosen key
     return sorted(preds, key=lambda x: x[2], reverse=True)[:top_k]
 
@@ -471,10 +489,8 @@ if 'user_area' not in st.session_state:
 
 # Districts, Crops, Seasons with icons
 districts_list = list(le_district.classes_)
-crops_list = list(le_crop.classes_)
-seasons_list = list(season_map.keys())
-district_options = districts_list
-crop_options = crops_list
+# Use custom crop display options
+crop_options = crop_display_options
 season_display_options = ['🌾 Kharif', '❄️ Rabi', '🍂 Autumn', '☀️ Summer', '🌨️ Winter']
 
 # User Inputs
@@ -494,7 +510,7 @@ with col1:
     st.subheader("📝 Input Details")
     with st.form("inputs_form"):
         with st.expander("Select Parameters", expanded=True):
-            user_district = st.selectbox("🌍 District", district_options, index=0)
+            user_district = st.selectbox("🌍 District", districts_list, index=0)
             user_crop = st.selectbox("🌾 Crop", crop_options, index=0)
             user_season_display = st.selectbox("☀️ Season", season_display_options, index=0)
             user_season = user_season_display.split(' ', 1)[1] if ' ' in user_season_display else user_season_display

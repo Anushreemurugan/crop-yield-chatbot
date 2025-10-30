@@ -111,17 +111,24 @@ st.markdown("""
         color: var(--text-primary-light) !important;
         font-weight: bold !important;
     }
-    [data-testid="stNumberInput"] div[data-baseweb="input"] {
+    [data-testid="stNumberInput"] .element-container {
         background-color: var(--card-bg-light) !important;
         border: 2px solid var(--widget-border-light) !important;
         border-radius: 8px !important;
-        color: var(--widget-text-light) !important;
         padding: 8px !important;
+        margin: 4px 0 !important;
     }
-    [data-testid="stNumberInput"] div[data-baseweb="input"] input {
-        color: var(--widget-text-light) !important;
+    [data-testid="stNumberInput"] input[type="number"] {
         background-color: transparent !important;
         border: none !important;
+        color: var(--widget-text-light) !important;
+        outline: none !important;
+        width: 100% !important;
+    }
+    [data-testid="stNumberInput"] div[role="button"] {
+        background-color: var(--widget-border-light) !important;
+        border: 1px solid var(--widget-border-light) !important;
+        color: var(--card-bg-light) !important;
     }
     /* Dark mode overrides for widgets */
     @media (prefers-color-scheme: dark) {
@@ -135,13 +142,18 @@ st.markdown("""
             border: 1px solid var(--widget-border-dark) !important;
             color: var(--widget-text-dark) !important;
         }
-        [data-testid="stNumberInput"] div[data-baseweb="input"] {
+        [data-testid="stNumberInput"] .element-container {
             background-color: var(--card-bg-dark) !important;
             border: 2px solid var(--widget-border-dark) !important;
             color: var(--widget-text-dark) !important;
         }
-        [data-testid="stNumberInput"] div[data-baseweb="input"] input {
+        [data-testid="stNumberInput"] input[type="number"] {
             color: var(--widget-text-dark) !important;
+        }
+        [data-testid="stNumberInput"] div[role="button"] {
+            background-color: var(--widget-border-dark) !important;
+            border: 1px solid var(--widget-border-dark) !important;
+            color: var(--card-bg-dark) !important;
         }
         [data-testid="stSelectbox"] > label > div,
         [data-testid="stNumberInput"] > label > div {

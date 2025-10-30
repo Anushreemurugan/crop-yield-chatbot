@@ -486,14 +486,6 @@ if 'user_season' not in st.session_state:
     st.session_state.user_season = None
 if 'user_area' not in st.session_state:
     st.session_state.user_area = 5000.0
-if 'show_district_help' not in st.session_state:
-    st.session_state.show_district_help = False
-if 'show_crop_help' not in st.session_state:
-    st.session_state.show_crop_help = False
-if 'show_season_help' not in st.session_state:
-    st.session_state.show_season_help = False
-if 'show_area_help' not in st.session_state:
-    st.session_state.show_area_help = False
 
 # Districts, Crops, Seasons with icons
 districts_list = list(le_district.classes_)
@@ -505,9 +497,8 @@ season_display_options = ['🌾 Kharif', '❄️ Rabi', '🍂 Autumn', '☀️ S
 with st.sidebar:
     st.header("🛠️ Settings")
     st.write("**App Version**: 1.3")
-    
     if st.button("Reset Form"):
-        for key in ['predicted', 'yield_p', 'suitable', 'thresh', 'suggestions', 'climate_msg', 'user_district', 'user_crop', 'user_season', 'user_area', 'show_district_help', 'show_crop_help', 'show_season_help', 'show_area_help']:
+        for key in ['predicted', 'yield_p', 'suitable', 'thresh', 'suggestions', 'climate_msg', 'user_district', 'user_crop', 'user_season', 'user_area']:
             if key in st.session_state:
                 del st.session_state[key]
         st.session_state.predicted = False
@@ -519,46 +510,11 @@ with col1:
     st.subheader("📝 Input Details")
     with st.form("inputs_form"):
         with st.expander("Select Parameters", expanded=True):
-            # District
-            col_d, col_hd = st.columns([4, 1])
-            with col_d:
-                user_district = st.selectbox("🌍 District", districts_list, index=0)
-            with col_hd:
-                if st.button("ℹ️", key="toggle_district_help"):
-                    st.session_state.show_district_help = not st.session_state.show_district_help
-            if st.session_state.show_district_help:
-                st.info("📌 Tip: Districts are case-sensitive. E.g., 'Ariyalur' for Tamil Nadu region.")
-            
-            # Crop
-            col_c, col_hc = st.columns([4, 1])
-            with col_c:
-                user_crop = st.selectbox("🌾 Crop", crop_options, index=0)
-            with col_hc:
-                if st.button("ℹ️", key="toggle_crop_help"):
-                    st.session_state.show_crop_help = not st.session_state.show_crop_help
-            if st.session_state.show_crop_help:
-                st.info("📌 Tip: Crops like 'Rice' or 'Cotton'. Excludes minor 'Other' categories.")
-            
-            # Season
-            col_s, col_hs = st.columns([4, 1])
-            with col_s:
-                user_season_display = st.selectbox("☀️ Season", season_display_options, index=0)
-                user_season = user_season_display.split(' ', 1)[1] if ' ' in user_season_display else user_season_display
-            with col_hs:
-                if st.button("ℹ️", key="toggle_season_help"):
-                    st.session_state.show_season_help = not st.session_state.show_season_help
-            if st.session_state.show_season_help:
-                st.info("📌 Tip: Kharif (Jun-Sep), Rabi (Oct-Mar), etc. Matches Indian cropping cycles.")
-            
-            # Area
-            col_a, col_ha = st.columns([4, 1])
-            with col_a:
-                user_area = st.number_input("📏 Area (Hectare)", min_value=1.0, value=5000.0, step=100.0)
-            with col_ha:
-                if st.button("ℹ️", key="toggle_area_help"):
-                    st.session_state.show_area_help = not st.session_state.show_area_help
-            if st.session_state.show_area_help:
-                st.info("📌 Tip: Larger areas may influence economic scaling, but yield is per hectare.")
+            user_district = st.selectbox("🌍 District", districts_list, index=0)
+            user_crop = st.selectbox("🌾 Crop", crop_options, index=0)
+            user_season_display = st.selectbox("☀️ Season", season_display_options, index=0)
+            user_season = user_season_display.split(' ', 1)[1] if ' ' in user_season_display else user_season_display
+            user_area = st.number_input("📏 Area (Hectare)", min_value=1.0, value=5000.0, step=100.0)
         # Full-width horizontal button
         submitted = st.form_submit_button("🚀 Predict & Suggest", type="primary", use_container_width=True)
 
@@ -577,7 +533,6 @@ with col2:
                 col_metrics1, col_metrics2 = st.columns(2)
                 with col_metrics1:
                     st.metric("Suitability", "Yes" if st.session_state.suitable else "No")
-                    st.caption("📌 Based on historical average threshold.")
                 with col_metrics2:
                     st.metric("Area Input", f"{st.session_state.user_area} Ha")
                 # Suggest Crops
@@ -585,7 +540,6 @@ with col2:
                 if st.session_state.suggestions:
                     suggestions_df = pd.DataFrame([[s[0], round(s[1], 2)] for s in st.session_state.suggestions], columns=['Crop', 'Predicted Yield (T/Ha)'])
                     st.table(suggestions_df.style.background_gradient(cmap='Greens'))
-                    st.caption("📌 Sorted by yield + crop diversity for balanced farming.")
                 else:
                     st.error("No crop suggestions available.")
             else:

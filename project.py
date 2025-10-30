@@ -504,6 +504,17 @@ with st.sidebar:
         st.session_state.predicted = False
         st.rerun()
 
+    # Short help bar
+    with st.expander("ℹ️ Help", expanded=False):
+        st.info("""
+        **Quick Tips:**
+        - Select district, crop, season, and area.
+        - Click **Predict & Suggest** for results.
+        - Suitability compares to historical means.
+        - Uses real-time weather or historical data.
+        - Suggestions prioritize yield & diversity.
+        """)
+
 # Layout with columns
 col1, col2 = st.columns([1, 2])
 with col1:

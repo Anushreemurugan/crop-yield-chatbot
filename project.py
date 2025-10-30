@@ -21,7 +21,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS from old code, updated for dark mode compatibility
+# Custom CSS from old code, updated for dark mode compatibility and button color fix
 st.markdown("""
 <style>
     /* Theme-aware backgrounds and text colors */
@@ -36,6 +36,9 @@ st.markdown("""
         --card-border-dark: #81c784;
         --metric-text-light: #000000;
         --metric-text-dark: #ffffff;
+        --button-bg: #4caf50;
+        --button-text: #ffffff;
+        --button-hover: #45a049;
     }
 
     @media (prefers-color-scheme: dark) {
@@ -68,19 +71,31 @@ st.markdown("""
         font-size: 16px;
         color: var(--text-primary-light);
     }
-    /* Button styling */
+    /* Button styling - Enhanced for primary buttons with !important to override Streamlit defaults */
     .stButton > button {
-        background-color: #4caf50;
-        color: white;
-        border-radius: 20px;
-        padding: 0.5rem 1rem;
-        font-weight: bold;
-        white-space: nowrap;
+        background-color: var(--button-bg) !important;
+        color: var(--button-text) !important;
+        border: none !important;
+        border-radius: 20px !important;
+        padding: 0.5rem 1rem !important;
+        font-weight: bold !important;
+        white-space: nowrap !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        transition: background-color 0.3s ease !important;
     }
-    /* Form submit button full width */
+    .stButton > button:hover {
+        background-color: var(--button-hover) !important;
+        color: var(--button-text) !important;
+    }
+    /* Specific override for primary type buttons in forms */
     .stForm > .stButton > button {
-        width: 100%;
-        justify-content: center;
+        width: 100% !important;
+        justify-content: center !important;
+        background-color: var(--button-bg) !important;
+        color: var(--button-text) !important;
+    }
+    .stForm > .stButton > button:hover {
+        background-color: var(--button-hover) !important;
     }
     /* Metric cards - theme-aware */
     .metric-card {
@@ -103,10 +118,10 @@ st.markdown("""
     }
     /* Ensure Streamlit elements adapt */
     [data-testid="stMetricLabel"] {
-        color: var(--metric-text-light);
+        color: var(--metric-text-light) !important;
     }
     [data-testid="stMetricValue"] {
-        color: var(--metric-text-light);
+        color: var(--metric-text-light) !important;
     }
     /* Sidebar adjustments for dark mode */
     section[data-testid="stSidebar"] {

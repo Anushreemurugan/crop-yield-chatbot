@@ -497,6 +497,35 @@ season_display_options = ['🌾 Kharif', '❄️ Rabi', '🍂 Autumn', '☀️ S
 with st.sidebar:
     st.header("🛠️ Settings")
     st.write("**App Version**: 1.3")
+    
+    # Help Guide Expander for First-Time Users
+    with st.expander("ℹ️ First Time? Quick Guide", expanded=False):
+        st.markdown("""
+        ### Welcome to Crop Yield Predictor! 🌾
+        
+        **What is this app?**  
+        This tool uses machine learning (LightGBM model) trained on historical Indian agricultural data to predict crop yields based on district, crop, season, area, and current/historical weather. It also suggests alternative crops for better suitability.
+        
+        **How to Use (Step-by-Step):**
+        1. **Select District**: Choose from the dropdown (e.g., Ariyalur). Districts are based on Indian agricultural regions.
+        2. **Select Crop**: Pick a crop like "Rice" or "Wheat". Some names are simplified (e.g., "Green Gram" for Moong).
+        3. **Select Season**: Choose the planting season (e.g., Kharif for monsoon crops).
+        4. **Enter Area**: Input farm size in hectares (default: 5000 Ha). This affects scalability but not core prediction.
+        5. **Click "Predict & Suggest"**: The app fetches real-time weather (if available) or uses historical averages to predict yield.
+        
+        **Understanding Outputs:**
+        - **Predicted Yield**: Estimated tonnes per hectare (T/Ha).
+        - **Suitability**: "Yes" if predicted yield > historical average for that district/crop (threshold shown in metrics).
+        - **Suggestions**: Top 2 alternative crops, sorted by balanced yield + diversity (to promote variety).
+        
+        **Tips:**
+        - Real-time weather from OpenWeatherMap; falls back to historical if unavailable.
+        - Predictions for 2025 (adjustable in code).
+        - For issues: Check exact spellings or reset form.
+        
+        **Data Source**: Merged monthly dataset (2013-2023) with weather from NASA/NOAA.
+        """)
+    
     if st.button("Reset Form"):
         for key in ['predicted', 'yield_p', 'suitable', 'thresh', 'suggestions', 'climate_msg', 'user_district', 'user_crop', 'user_season', 'user_area']:
             if key in st.session_state:
@@ -510,11 +539,20 @@ with col1:
     st.subheader("📝 Input Details")
     with st.form("inputs_form"):
         with st.expander("Select Parameters", expanded=True):
-            user_district = st.selectbox("🌍 District", districts_list, index=0)
-            user_crop = st.selectbox("🌾 Crop", crop_options, index=0)
+            col_input1, col_input2 = st.columns(2)
+            with col_input1:
+                user_district = st.selectbox("🌍 District", districts_list, index=0)
+                st.caption("📌 Tip: Districts are case-sensitive. E.g., 'Ariyalur' for Tamil Nadu region.")
+            with col_input2:
+                user_crop = st.selectbox("🌾 Crop", crop_options, index=0)
+                st.caption("📌 Tip: Crops like 'Rice' or 'Cotton'. Excludes minor 'Other' categories.")
+            
             user_season_display = st.selectbox("☀️ Season", season_display_options, index=0)
             user_season = user_season_display.split(' ', 1)[1] if ' ' in user_season_display else user_season_display
+            st.caption("📌 Tip: Kharif (Jun-Sep), Rabi (Oct-Mar), etc. Matches Indian cropping cycles.")
+            
             user_area = st.number_input("📏 Area (Hectare)", min_value=1.0, value=5000.0, step=100.0)
+            st.caption("📌 Tip: Larger areas may influence economic scaling, but yield is per hectare.")
         # Full-width horizontal button
         submitted = st.form_submit_button("🚀 Predict & Suggest", type="primary", use_container_width=True)
 
@@ -533,6 +571,7 @@ with col2:
                 col_metrics1, col_metrics2 = st.columns(2)
                 with col_metrics1:
                     st.metric("Suitability", "Yes" if st.session_state.suitable else "No")
+                    st.caption("📌 Based on historical average threshold.")
                 with col_metrics2:
                     st.metric("Area Input", f"{st.session_state.user_area} Ha")
                 # Suggest Crops
@@ -540,6 +579,7 @@ with col2:
                 if st.session_state.suggestions:
                     suggestions_df = pd.DataFrame([[s[0], round(s[1], 2)] for s in st.session_state.suggestions], columns=['Crop', 'Predicted Yield (T/Ha)'])
                     st.table(suggestions_df.style.background_gradient(cmap='Greens'))
+                    st.caption("📌 Sorted by yield + crop diversity for balanced farming.")
                 else:
                     st.error("No crop suggestions available.")
             else:

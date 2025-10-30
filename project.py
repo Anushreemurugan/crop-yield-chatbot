@@ -21,7 +21,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS from old code, updated for dark mode compatibility and widget borders
+# Custom CSS from old code, updated for dark mode compatibility and enhanced widget visibility
 st.markdown("""
 <style>
     /* Theme-aware backgrounds and text colors */
@@ -38,6 +38,8 @@ st.markdown("""
         --metric-text-dark: #ffffff;
         --widget-border-light: #4caf50;
         --widget-border-dark: #81c784;
+        --widget-text-light: #000000;
+        --widget-text-dark: #ffffff;
     }
 
     @media (prefers-color-scheme: dark) {
@@ -54,6 +56,8 @@ st.markdown("""
             --metric-text-dark: var(--metric-text-dark);
             --widget-border-light: var(--widget-border-dark);
             --widget-border-dark: var(--widget-border-dark);
+            --widget-text-light: var(--widget-text-dark);
+            --widget-text-dark: var(--widget-text-dark);
         }
     }
 
@@ -86,37 +90,62 @@ st.markdown("""
         width: 100%;
         justify-content: center;
     }
-    /* Widget borders for selectbox and number input - theme-aware */
-    [data-testid="stSelectbox"] > div > div {
-        background-color: var(--card-bg-light);
-        border: 1px solid var(--widget-border-light);
-        border-radius: 8px;
-        padding: 8px;
-        margin: 4px 0;
+    /* Enhanced widget borders and text visibility for selectbox and number input - theme-aware with !important */
+    [data-testid="stSelectbox"] > label > div {
+        color: var(--text-primary-light) !important;
+        font-weight: bold !important;
     }
-    [data-testid="stNumberInput"] > div > div {
-        background-color: var(--card-bg-light);
-        border: 1px solid var(--widget-border-light);
-        border-radius: 8px;
-        padding: 8px;
-        margin: 4px 0;
+    [data-testid="stSelectbox"] div[data-baseweb="select"] {
+        background-color: var(--card-bg-light) !important;
+        border: 2px solid var(--widget-border-light) !important;
+        border-radius: 8px !important;
+        color: var(--widget-text-light) !important;
+        padding: 8px !important;
     }
-    /* Ensure widget labels are visible */
-    [data-testid="stSelectbox"] label,
-    [data-testid="stNumberInput"] label {
-        color: var(--text-primary-light);
-        font-weight: bold;
+    [data-testid="stSelectbox"] div[data-baseweb="select"] div[role="listbox"] {
+        background-color: var(--card-bg-light) !important;
+        border: 1px solid var(--widget-border-light) !important;
+        color: var(--widget-text-light) !important;
     }
+    [data-testid="stNumberInput"] > label > div {
+        color: var(--text-primary-light) !important;
+        font-weight: bold !important;
+    }
+    [data-testid="stNumberInput"] div[data-baseweb="input"] {
+        background-color: var(--card-bg-light) !important;
+        border: 2px solid var(--widget-border-light) !important;
+        border-radius: 8px !important;
+        color: var(--widget-text-light) !important;
+        padding: 8px !important;
+    }
+    [data-testid="stNumberInput"] div[data-baseweb="input"] input {
+        color: var(--widget-text-light) !important;
+        background-color: transparent !important;
+        border: none !important;
+    }
+    /* Dark mode overrides for widgets */
     @media (prefers-color-scheme: dark) {
-        [data-testid="stSelectbox"] > div > div,
-        [data-testid="stNumberInput"] > div > div {
-            background-color: var(--card-bg-dark);
-            border: 1px solid var(--widget-border-dark);
-            color: var(--text-primary-dark);
+        [data-testid="stSelectbox"] div[data-baseweb="select"] {
+            background-color: var(--card-bg-dark) !important;
+            border: 2px solid var(--widget-border-dark) !important;
+            color: var(--widget-text-dark) !important;
         }
-        [data-testid="stSelectbox"] label,
-        [data-testid="stNumberInput"] label {
-            color: var(--text-primary-dark);
+        [data-testid="stSelectbox"] div[data-baseweb="select"] div[role="listbox"] {
+            background-color: var(--card-bg-dark) !important;
+            border: 1px solid var(--widget-border-dark) !important;
+            color: var(--widget-text-dark) !important;
+        }
+        [data-testid="stNumberInput"] div[data-baseweb="input"] {
+            background-color: var(--card-bg-dark) !important;
+            border: 2px solid var(--widget-border-dark) !important;
+            color: var(--widget-text-dark) !important;
+        }
+        [data-testid="stNumberInput"] div[data-baseweb="input"] input {
+            color: var(--widget-text-dark) !important;
+        }
+        [data-testid="stSelectbox"] > label > div,
+        [data-testid="stNumberInput"] > label > div {
+            color: var(--text-primary-dark) !important;
         }
     }
     /* Metric cards - theme-aware */

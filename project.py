@@ -21,7 +21,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS from old code, updated for dark mode compatibility
+# Custom CSS from old code, updated for dark mode compatibility and widget borders
 st.markdown("""
 <style>
     /* Theme-aware backgrounds and text colors */
@@ -36,6 +36,8 @@ st.markdown("""
         --card-border-dark: #81c784;
         --metric-text-light: #000000;
         --metric-text-dark: #ffffff;
+        --widget-border-light: #4caf50;
+        --widget-border-dark: #81c784;
     }
 
     @media (prefers-color-scheme: dark) {
@@ -50,6 +52,8 @@ st.markdown("""
             --card-border-dark: var(--card-border-dark);
             --metric-text-light: var(--metric-text-dark);
             --metric-text-dark: var(--metric-text-dark);
+            --widget-border-light: var(--widget-border-dark);
+            --widget-border-dark: var(--widget-border-dark);
         }
     }
 
@@ -81,6 +85,39 @@ st.markdown("""
     .stForm > .stButton > button {
         width: 100%;
         justify-content: center;
+    }
+    /* Widget borders for selectbox and number input - theme-aware */
+    [data-testid="stSelectbox"] > div > div {
+        background-color: var(--card-bg-light);
+        border: 1px solid var(--widget-border-light);
+        border-radius: 8px;
+        padding: 8px;
+        margin: 4px 0;
+    }
+    [data-testid="stNumberInput"] > div > div {
+        background-color: var(--card-bg-light);
+        border: 1px solid var(--widget-border-light);
+        border-radius: 8px;
+        padding: 8px;
+        margin: 4px 0;
+    }
+    /* Ensure widget labels are visible */
+    [data-testid="stSelectbox"] label,
+    [data-testid="stNumberInput"] label {
+        color: var(--text-primary-light);
+        font-weight: bold;
+    }
+    @media (prefers-color-scheme: dark) {
+        [data-testid="stSelectbox"] > div > div,
+        [data-testid="stNumberInput"] > div > div {
+            background-color: var(--card-bg-dark);
+            border: 1px solid var(--widget-border-dark);
+            color: var(--text-primary-dark);
+        }
+        [data-testid="stSelectbox"] label,
+        [data-testid="stNumberInput"] label {
+            color: var(--text-primary-dark);
+        }
     }
     /* Metric cards - theme-aware */
     .metric-card {

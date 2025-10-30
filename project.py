@@ -21,7 +21,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS from old code, updated for dark mode compatibility and button color fix
+# Custom CSS from old code, updated for dark mode compatibility and targeted button color fix
 st.markdown("""
 <style>
     /* Theme-aware backgrounds and text colors */
@@ -71,7 +71,7 @@ st.markdown("""
         font-size: 16px;
         color: var(--text-primary-light);
     }
-    /* Button styling - Enhanced for primary buttons with !important to override Streamlit defaults */
+    /* General button styling - fallback */
     .stButton > button {
         background-color: var(--button-bg) !important;
         color: var(--button-text) !important;
@@ -87,15 +87,27 @@ st.markdown("""
         background-color: var(--button-hover) !important;
         color: var(--button-text) !important;
     }
-    /* Specific override for primary type buttons in forms */
-    .stForm > .stButton > button {
-        width: 100% !important;
-        justify-content: center !important;
+    /* Targeted styling for primary form submit button using key */
+    button[data-baseweb="button"][data-testid="stButton"][key="predict_button"] {
         background-color: var(--button-bg) !important;
         color: var(--button-text) !important;
+        border: none !important;
+        border-radius: 20px !important;
+        padding: 0.75rem 1rem !important;
+        font-weight: bold !important;
+        width: 100% !important;
+        justify-content: center !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        transition: background-color 0.3s ease !important;
     }
-    .stForm > .stButton > button:hover {
+    button[data-baseweb="button"][data-testid="stButton"][key="predict_button"]:hover {
         background-color: var(--button-hover) !important;
+        color: var(--button-text) !important;
+    }
+    /* Override for focused state */
+    button[data-baseweb="button"][data-testid="stButton"][key="predict_button"]:focus {
+        background-color: var(--button-bg) !important;
+        box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2) !important;
     }
     /* Metric cards - theme-aware */
     .metric-card {
@@ -418,7 +430,7 @@ season_display_options = ['🌾 Kharif', '❄️ Rabi', '🍂 Autumn', '☀️ S
 with st.sidebar:
     st.header("🛠️ Settings")
     st.write("**App Version**: 1.3")
-    if st.button("Reset Form"):
+    if st.button("Reset Form", key="reset_button"):
         for key in ['predicted', 'yield_p', 'suitable', 'thresh', 'suggestions', 'climate_msg', 'user_district', 'user_crop', 'user_season', 'user_area']:
             if key in st.session_state:
                 del st.session_state[key]
@@ -436,8 +448,8 @@ with col1:
             user_season_display = st.selectbox("☀️ Season", season_display_options, index=0)
             user_season = user_season_display.split(' ', 1)[1] if ' ' in user_season_display else user_season_display
             user_area = st.number_input("📏 Area (Hectare)", min_value=1.0, value=5000.0, step=100.0)
-        # Full-width horizontal button
-        submitted = st.form_submit_button("🚀 Predict & Suggest", type="primary", use_container_width=True)
+        # Full-width horizontal button with unique key for targeted CSS
+        submitted = st.form_submit_button("🚀 Predict & Suggest", type="primary", use_container_width=True, key="predict_button")
 
 with col2:
     if st.session_state.predicted:
@@ -465,8 +477,8 @@ with col2:
                     st.error("No crop suggestions available.")
             else:
                 st.error("Prediction failed. Check inputs.")
-        # Button to hide results or new prediction
-        if st.button("New Prediction"):
+        # Button to hide results or new prediction with key
+        if st.button("New Prediction", key="new_prediction_button"):
             st.session_state.predicted = False
             st.rerun()
 
